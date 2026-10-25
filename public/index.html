@@ -7,9 +7,7 @@
   <title>DR. JIBA | Sistema de Gestión</title>
 
   <style>
-    * {
-      box-sizing: border-box;
-    }
+    * { box-sizing: border-box; }
 
     body {
       margin: 0;
@@ -25,9 +23,7 @@
       text-align: center;
     }
 
-    header h1 {
-      margin: 0 0 8px;
-    }
+    header h1 { margin: 0 0 8px; }
 
     nav {
       display: flex;
@@ -38,7 +34,7 @@
       padding: 14px;
     }
 
-    nav button {
+    nav button, .boton {
       background: white;
       border: none;
       border-radius: 6px;
@@ -48,9 +44,7 @@
       color: #7f1d1d;
     }
 
-    nav button:hover {
-      background: #fee2e2;
-    }
+    nav button:hover { background: #fee2e2; }
 
     main {
       max-width: 1100px;
@@ -67,10 +61,7 @@
 
     .cards {
       display: grid;
-      grid-template-columns: repeat(
-        auto-fit,
-        minmax(180px, 1fr)
-      );
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
       gap: 18px;
       margin-top: 20px;
     }
@@ -82,9 +73,7 @@
       border-radius: 8px;
     }
 
-    .card h3 {
-      margin-top: 0;
-    }
+    .card h3 { margin-top: 0; }
 
     .card p {
       font-size: 25px;
@@ -115,9 +104,7 @@
       border-bottom: 1px solid #e5e7eb;
     }
 
-    tr:nth-child(even) {
-      background: #f9fafb;
-    }
+    tr:nth-child(even) { background: #f9fafb; }
 
     .stock-bajo {
       color: #b91c1c;
@@ -131,11 +118,82 @@
       margin-top: 15px;
     }
 
+    .login {
+      max-width: 420px;
+      margin: 45px auto;
+    }
+
+    .login h2 {
+      text-align: center;
+      color: #7f1d1d;
+    }
+
+    .login label {
+      display: block;
+      margin-top: 18px;
+      font-weight: bold;
+    }
+
+    .login input {
+      width: 100%;
+      padding: 12px;
+      margin-top: 7px;
+      border: 1px solid #d1d5db;
+      border-radius: 6px;
+      font-size: 15px;
+    }
+
+    .login button {
+      width: 100%;
+      background: #991b1b;
+      color: white;
+      padding: 13px;
+      margin-top: 22px;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      font-weight: bold;
+    }
+
+    .login button:disabled {
+      opacity: .6;
+      cursor: wait;
+    }
+
+    .error {
+      color: #b91c1c;
+      margin-top: 15px;
+      text-align: center;
+    }
+
+    .usuario {
+      background: #fff7f7;
+      padding: 12px 18px;
+      border-radius: 8px;
+      margin-bottom: 20px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+
+    .usuario button {
+      background: #991b1b;
+      color: white;
+      border: none;
+      padding: 10px 14px;
+      border-radius: 6px;
+      cursor: pointer;
+    }
+
     footer {
       text-align: center;
       padding: 25px;
       color: #6b7280;
     }
+
+    [hidden] { display: none !important; }
   </style>
 </head>
 
@@ -146,63 +204,68 @@
     <p>Sistema de Compras, Ventas e Inventario</p>
   </header>
 
-  <nav>
-    <button onclick="mostrar('Inicio')">
-      Inicio
-    </button>
-
-    <button onclick="mostrar('Productos')">
-      Productos
-    </button>
-
-    <button onclick="mostrar('Compras')">
-      Compras
-    </button>
-
-    <button onclick="mostrar('Ventas')">
-      Ventas
-    </button>
-
-    <button onclick="mostrar('Inventario')">
-      Inventario
-    </button>
+  <nav id="menu" hidden>
+    <button onclick="mostrar('Inicio')">Inicio</button>
+    <button onclick="mostrar('Productos')">Productos</button>
+    <button onclick="mostrar('Compras')">Compras</button>
+    <button onclick="mostrar('Ventas')">Ventas</button>
+    <button onclick="mostrar('Inventario')">Inventario</button>
   </nav>
 
   <main>
-    <section class="panel">
 
-      <h2 id="titulo">Panel Principal</h2>
-
-      <p id="descripcion">
-        Bienvenido al sistema de gestión
-        del restaurante DR. JIBA.
+    <section id="seccionLogin" class="panel login">
+      <h2>Iniciar sesión</h2>
+      <p style="text-align:center">
+        Acceso al sistema administrativo DR. JIBA
       </p>
 
-      <div class="cards" id="contenido">
+      <form id="formLogin">
+        <label for="correo">Correo electrónico</label>
+        <input
+          type="email"
+          id="correo"
+          placeholder="administrador@correo.com"
+          autocomplete="username"
+          required
+        >
 
-        <div class="card">
-          <h3>Productos</h3>
-          <p>—</p>
-        </div>
+        <label for="contrasena">Contraseña</label>
+        <input
+          type="password"
+          id="contrasena"
+          placeholder="Ingresa tu contraseña"
+          autocomplete="current-password"
+          required
+        >
 
-        <div class="card">
-          <h3>Compras</h3>
-          <p>—</p>
-        </div>
+        <button type="submit" id="btnIngresar">
+          Ingresar al sistema
+        </button>
+      </form>
 
-        <div class="card">
-          <h3>Ventas</h3>
-          <p>—</p>
-        </div>
+      <p id="errorLogin" class="error" role="alert"></p>
+    </section>
 
-        <div class="card">
-          <h3>Inventario</h3>
-          <p>—</p>
-        </div>
+    <section id="seccionSistema" hidden>
 
+      <div class="usuario">
+        <span id="datosUsuario">Administrador DR. JIBA</span>
+        <button onclick="cerrarSesion()">Cerrar sesión</button>
       </div>
 
+      <section class="panel">
+        <h2 id="titulo">Panel Principal</h2>
+
+        <p id="descripcion">
+          Bienvenido al sistema de gestión del restaurante DR. JIBA.
+        </p>
+
+        <div class="cards" id="contenido"></div>
+      </section>
+
     </section>
+
   </main>
 
   <footer>
@@ -210,20 +273,162 @@
   </footer>
 
   <script>
+    const API = "";
 
-    async function obtenerProductos() {
-      const respuesta = await fetch("/api/productos");
+    let tokenAcceso = sessionStorage.getItem("drjiba_token");
+    let sesionActual = 0;
+
+    const login = document.getElementById("seccionLogin");
+    const sistema = document.getElementById("seccionSistema");
+    const menu = document.getElementById("menu");
+
+    function verLogin() {
+      sesionActual++;
+      tokenAcceso = null;
+      sessionStorage.removeItem("drjiba_token");
+      login.hidden = false;
+      sistema.hidden = true;
+      menu.hidden = true;
+      document.getElementById("contrasena").value = "";
+    }
+
+    function verSistema() {
+      login.hidden = true;
+      sistema.hidden = false;
+      menu.hidden = false;
+      mostrar("Inicio");
+    }
+
+    async function peticionProtegida(ruta) {
+      if (!tokenAcceso) {
+        throw new Error("Debes iniciar sesión");
+      }
+
+      const respuesta = await fetch(API + ruta, {
+        headers: {
+          Authorization: "Bearer " + tokenAcceso
+        }
+      });
+
+      if (respuesta.status === 401) {
+        verLogin();
+        throw new Error("La sesión ha expirado");
+      }
 
       if (!respuesta.ok) {
-        throw new Error(
-          "No se pudieron consultar los productos"
-        );
+        throw new Error("Error al consultar el servidor");
       }
 
       return await respuesta.json();
     }
 
+    async function validarSesion() {
+      if (!tokenAcceso) {
+        verLogin();
+        return;
+      }
+
+      const intento = ++sesionActual;
+
+      try {
+        const perfil = await peticionProtegida("/api/mi-perfil");
+
+        if (intento !== sesionActual) return;
+
+        if (!perfil || perfil.activo === false) {
+          throw new Error("Usuario inactivo");
+        }
+
+        const nombre = perfil.nombre_completo || "Usuario";
+        const rol = perfil.rol || "Sin rol";
+
+        document.getElementById("datosUsuario").textContent =
+          nombre + " | " + rol;
+
+        verSistema();
+
+      } catch (error) {
+        if (intento !== sesionActual) return;
+        console.error("No se pudo validar la sesión:", error.message);
+        verLogin();
+      }
+    }
+
+    document.getElementById("formLogin").addEventListener(
+      "submit",
+      async function(evento) {
+        evento.preventDefault();
+
+        const correo = document.getElementById("correo").value.trim();
+        const contrasena = document.getElementById("contrasena").value;
+        const errorLogin = document.getElementById("errorLogin");
+        const boton = document.getElementById("btnIngresar");
+
+        errorLogin.textContent = "";
+        boton.disabled = true;
+        boton.textContent = "Ingresando...";
+
+        try {
+          const respuesta = await fetch(API + "/api/login", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+              email: correo,
+              password: contrasena
+            })
+          });
+
+          const resultado = await respuesta.json();
+
+          if (!respuesta.ok) {
+            throw new Error(
+              resultado.error || "No se pudo iniciar sesión"
+            );
+          }
+
+          const token =
+            resultado.access_token ||
+            resultado.session?.access_token;
+
+          if (!token) {
+            throw new Error("El servidor no devolvió un token");
+          }
+
+          tokenAcceso = token;
+          sessionStorage.setItem("drjiba_token", token);
+
+          await validarSesion();
+
+          if (!tokenAcceso) {
+            errorLogin.textContent =
+              "No se pudo validar tu perfil. Revisa los permisos.";
+          }
+
+        } catch (error) {
+          errorLogin.textContent = error.message;
+        } finally {
+          boton.disabled = false;
+          boton.textContent = "Ingresar al sistema";
+        }
+      }
+    );
+
+    function cerrarSesion() {
+      verLogin();
+      document.getElementById("errorLogin").textContent = "";
+    }
+
+    async function obtenerProductos() {
+      return await peticionProtegida("/api/productos");
+    }
+
     async function mostrar(modulo) {
+      if (!tokenAcceso) {
+        verLogin();
+        return;
+      }
 
       const titulo = document.getElementById("titulo");
       const descripcion = document.getElementById("descripcion");
@@ -233,7 +438,6 @@
         modulo === "Inicio" ? "Panel Principal" : modulo;
 
       if (modulo === "Inicio") {
-
         descripcion.textContent =
           "Bienvenido al sistema de gestión del restaurante DR. JIBA.";
 
@@ -244,17 +448,14 @@
             <h3>Productos</h3>
             <p id="totalProductos">—</p>
           </div>
-
           <div class="card">
             <h3>Compras</h3>
             <p>—</p>
           </div>
-
           <div class="card">
             <h3>Ventas</h3>
             <p>—</p>
           </div>
-
           <div class="card">
             <h3>Unidades en stock</h3>
             <p id="totalStock">—</p>
@@ -266,18 +467,22 @@
 
           const stockTotal = productos.reduce(
             (total, producto) =>
-              total + Number(producto.stock_actual),
+              total + Number(producto.stock_actual || 0),
             0
           );
 
-          document.getElementById(
-            "totalProductos"
-          ).textContent = productos.length;
+          const totalProductos =
+            document.getElementById("totalProductos");
+          const totalStock =
+            document.getElementById("totalStock");
 
-          document.getElementById(
-            "totalStock"
-          ).textContent = stockTotal;
+          if (totalProductos) {
+            totalProductos.textContent = productos.length;
+          }
 
+          if (totalStock) {
+            totalStock.textContent = stockTotal;
+          }
         } catch (error) {
           console.error(error);
         }
@@ -285,21 +490,15 @@
         return;
       }
 
-      if (
-        modulo === "Productos" ||
-        modulo === "Inventario"
-      ) {
-
+      if (modulo === "Productos" || modulo === "Inventario") {
         descripcion.textContent =
           "Información actualizada desde Supabase.";
 
         contenido.style.display = "block";
-
         contenido.innerHTML =
           '<p class="mensaje">Cargando productos...</p>';
 
         try {
-
           const productos = await obtenerProductos();
 
           contenido.innerHTML = "";
@@ -314,18 +513,15 @@
           contenedor.className = "tabla-contenedor";
 
           const tabla = document.createElement("table");
-
           const encabezado = document.createElement("thead");
           const filaEncabezado = document.createElement("tr");
 
-          const columnas = [
+          [
             "ID",
             "Producto",
             "Precio de venta",
             "Stock actual"
-          ];
-
-          columnas.forEach(nombre => {
+          ].forEach(nombre => {
             const th = document.createElement("th");
             th.textContent = nombre;
             filaEncabezado.appendChild(th);
@@ -337,20 +533,14 @@
           const cuerpo = document.createElement("tbody");
 
           productos.forEach(producto => {
-
             const fila = document.createElement("tr");
 
-            const valores = [
+            [
               producto.id_producto,
               producto.nombre,
-              "Bs " + Number(
-                producto.precio_venta
-              ).toFixed(2),
+              "Bs " + Number(producto.precio_venta).toFixed(2),
               producto.stock_actual
-            ];
-
-            valores.forEach((valor, indice) => {
-
+            ].forEach((valor, indice) => {
               const celda = document.createElement("td");
               celda.textContent = valor;
 
@@ -362,11 +552,9 @@
               }
 
               fila.appendChild(celda);
-
             });
 
             cuerpo.appendChild(fila);
-
           });
 
           tabla.appendChild(cuerpo);
@@ -374,12 +562,9 @@
           contenido.appendChild(contenedor);
 
         } catch (error) {
-
           console.error(error);
-
           contenido.innerHTML =
             '<p class="mensaje">Error al cargar los productos. Intenta nuevamente.</p>';
-
         }
 
         return;
@@ -389,12 +574,9 @@
         "Módulo de " + modulo + " en preparación.";
 
       contenido.style.display = "none";
-
     }
 
-    // Cargar el panel principal al abrir la pagina
-    mostrar("Inicio");
-
+    validarSesion();
   </script>
 
 </body>

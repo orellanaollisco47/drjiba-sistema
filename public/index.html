@@ -5,8 +5,11 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>DR. JIBA | Sistema de Gestión</title>
+
   <style>
-    * { box-sizing: border-box; }
+    * {
+      box-sizing: border-box;
+    }
 
     body {
       margin: 0;
@@ -22,7 +25,9 @@
       text-align: center;
     }
 
-    header h1 { margin: 0 0 8px; }
+    header h1 {
+      margin: 0 0 8px;
+    }
 
     nav {
       display: flex;
@@ -62,7 +67,10 @@
 
     .cards {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      grid-template-columns: repeat(
+        auto-fit,
+        minmax(180px, 1fr)
+      );
       gap: 18px;
       margin-top: 20px;
     }
@@ -74,12 +82,53 @@
       border-radius: 8px;
     }
 
-    .card h3 { margin-top: 0; }
+    .card h3 {
+      margin-top: 0;
+    }
 
     .card p {
       font-size: 25px;
       font-weight: bold;
       margin-bottom: 0;
+    }
+
+    .tabla-contenedor {
+      width: 100%;
+      overflow-x: auto;
+      margin-top: 20px;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+
+    th {
+      background: #991b1b;
+      color: white;
+      text-align: left;
+      padding: 14px;
+    }
+
+    td {
+      padding: 13px;
+      border-bottom: 1px solid #e5e7eb;
+    }
+
+    tr:nth-child(even) {
+      background: #f9fafb;
+    }
+
+    .stock-bajo {
+      color: #b91c1c;
+      font-weight: bold;
+    }
+
+    .mensaje {
+      padding: 15px;
+      border-radius: 8px;
+      background: #fef2f2;
+      margin-top: 15px;
     }
 
     footer {
@@ -98,21 +147,39 @@
   </header>
 
   <nav>
-    <button onclick="mostrar('Inicio')">Inicio</button>
-    <button onclick="mostrar('Productos')">Productos</button>
-    <button onclick="mostrar('Compras')">Compras</button>
-    <button onclick="mostrar('Ventas')">Ventas</button>
-    <button onclick="mostrar('Inventario')">Inventario</button>
+    <button onclick="mostrar('Inicio')">
+      Inicio
+    </button>
+
+    <button onclick="mostrar('Productos')">
+      Productos
+    </button>
+
+    <button onclick="mostrar('Compras')">
+      Compras
+    </button>
+
+    <button onclick="mostrar('Ventas')">
+      Ventas
+    </button>
+
+    <button onclick="mostrar('Inventario')">
+      Inventario
+    </button>
   </nav>
 
   <main>
     <section class="panel">
+
       <h2 id="titulo">Panel Principal</h2>
+
       <p id="descripcion">
-        Bienvenido al sistema de gestión del restaurante DR. JIBA.
+        Bienvenido al sistema de gestión
+        del restaurante DR. JIBA.
       </p>
 
       <div class="cards" id="contenido">
+
         <div class="card">
           <h3>Productos</h3>
           <p>—</p>
@@ -132,7 +199,9 @@
           <h3>Inventario</h3>
           <p>—</p>
         </div>
+
       </div>
+
     </section>
   </main>
 
@@ -141,17 +210,191 @@
   </footer>
 
   <script>
-    function mostrar(modulo) {
-      document.getElementById("titulo").textContent = modulo;
 
-      document.getElementById("descripcion").textContent =
-        modulo === "Inicio"
-          ? "Bienvenido al sistema de gestión del restaurante DR. JIBA."
-          : "Módulo de " + modulo + " en preparación.";
+    async function obtenerProductos() {
+      const respuesta = await fetch("/api/productos");
 
-      document.getElementById("contenido").style.display =
-        modulo === "Inicio" ? "grid" : "none";
+      if (!respuesta.ok) {
+        throw new Error(
+          "No se pudieron consultar los productos"
+        );
+      }
+
+      return await respuesta.json();
     }
+
+    async function mostrar(modulo) {
+
+      const titulo = document.getElementById("titulo");
+      const descripcion = document.getElementById("descripcion");
+      const contenido = document.getElementById("contenido");
+
+      titulo.textContent =
+        modulo === "Inicio" ? "Panel Principal" : modulo;
+
+      if (modulo === "Inicio") {
+
+        descripcion.textContent =
+          "Bienvenido al sistema de gestión del restaurante DR. JIBA.";
+
+        contenido.style.display = "grid";
+
+        contenido.innerHTML = `
+          <div class="card">
+            <h3>Productos</h3>
+            <p id="totalProductos">—</p>
+          </div>
+
+          <div class="card">
+            <h3>Compras</h3>
+            <p>—</p>
+          </div>
+
+          <div class="card">
+            <h3>Ventas</h3>
+            <p>—</p>
+          </div>
+
+          <div class="card">
+            <h3>Unidades en stock</h3>
+            <p id="totalStock">—</p>
+          </div>
+        `;
+
+        try {
+          const productos = await obtenerProductos();
+
+          const stockTotal = productos.reduce(
+            (total, producto) =>
+              total + Number(producto.stock_actual),
+            0
+          );
+
+          document.getElementById(
+            "totalProductos"
+          ).textContent = productos.length;
+
+          document.getElementById(
+            "totalStock"
+          ).textContent = stockTotal;
+
+        } catch (error) {
+          console.error(error);
+        }
+
+        return;
+      }
+
+      if (
+        modulo === "Productos" ||
+        modulo === "Inventario"
+      ) {
+
+        descripcion.textContent =
+          "Información actualizada desde Supabase.";
+
+        contenido.style.display = "block";
+
+        contenido.innerHTML =
+          '<p class="mensaje">Cargando productos...</p>';
+
+        try {
+
+          const productos = await obtenerProductos();
+
+          contenido.innerHTML = "";
+
+          if (productos.length === 0) {
+            contenido.textContent =
+              "No hay productos registrados.";
+            return;
+          }
+
+          const contenedor = document.createElement("div");
+          contenedor.className = "tabla-contenedor";
+
+          const tabla = document.createElement("table");
+
+          const encabezado = document.createElement("thead");
+          const filaEncabezado = document.createElement("tr");
+
+          const columnas = [
+            "ID",
+            "Producto",
+            "Precio de venta",
+            "Stock actual"
+          ];
+
+          columnas.forEach(nombre => {
+            const th = document.createElement("th");
+            th.textContent = nombre;
+            filaEncabezado.appendChild(th);
+          });
+
+          encabezado.appendChild(filaEncabezado);
+          tabla.appendChild(encabezado);
+
+          const cuerpo = document.createElement("tbody");
+
+          productos.forEach(producto => {
+
+            const fila = document.createElement("tr");
+
+            const valores = [
+              producto.id_producto,
+              producto.nombre,
+              "Bs " + Number(
+                producto.precio_venta
+              ).toFixed(2),
+              producto.stock_actual
+            ];
+
+            valores.forEach((valor, indice) => {
+
+              const celda = document.createElement("td");
+              celda.textContent = valor;
+
+              if (
+                indice === 3 &&
+                Number(producto.stock_actual) === 0
+              ) {
+                celda.className = "stock-bajo";
+              }
+
+              fila.appendChild(celda);
+
+            });
+
+            cuerpo.appendChild(fila);
+
+          });
+
+          tabla.appendChild(cuerpo);
+          contenedor.appendChild(tabla);
+          contenido.appendChild(contenedor);
+
+        } catch (error) {
+
+          console.error(error);
+
+          contenido.innerHTML =
+            '<p class="mensaje">Error al cargar los productos. Intenta nuevamente.</p>';
+
+        }
+
+        return;
+      }
+
+      descripcion.textContent =
+        "Módulo de " + modulo + " en preparación.";
+
+      contenido.style.display = "none";
+
+    }
+
+    // Cargar el panel principal al abrir la pagina
+    mostrar("Inicio");
+
   </script>
 
 </body>

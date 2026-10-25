@@ -1,0 +1,158 @@
+
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>DR. JIBA | Sistema de Gestión</title>
+  <style>
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      font-family: Arial, sans-serif;
+      background: #f3f4f6;
+      color: #1f2937;
+    }
+
+    header {
+      background: #7f1d1d;
+      color: white;
+      padding: 22px;
+      text-align: center;
+    }
+
+    header h1 { margin: 0 0 8px; }
+
+    nav {
+      display: flex;
+      justify-content: center;
+      flex-wrap: wrap;
+      gap: 10px;
+      background: #991b1b;
+      padding: 14px;
+    }
+
+    nav button {
+      background: white;
+      border: none;
+      border-radius: 6px;
+      padding: 12px 18px;
+      cursor: pointer;
+      font-weight: bold;
+      color: #7f1d1d;
+    }
+
+    nav button:hover {
+      background: #fee2e2;
+    }
+
+    main {
+      max-width: 1100px;
+      margin: 30px auto;
+      padding: 0 20px;
+    }
+
+    .panel {
+      background: white;
+      border-radius: 12px;
+      padding: 25px;
+      box-shadow: 0 2px 8px #00000012;
+    }
+
+    .cards {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 18px;
+      margin-top: 20px;
+    }
+
+    .card {
+      padding: 25px;
+      background: #fef2f2;
+      border-left: 5px solid #991b1b;
+      border-radius: 8px;
+    }
+
+    .card h3 { margin-top: 0; }
+
+    .card p {
+      font-size: 25px;
+      font-weight: bold;
+      margin-bottom: 0;
+    }
+
+    footer {
+      text-align: center;
+      padding: 25px;
+      color: #6b7280;
+    }
+  </style>
+</head>
+
+<body>
+
+  <header>
+    <h1>DR. JIBA</h1>
+    <p>Sistema de Compras, Ventas e Inventario</p>
+  </header>
+
+  <nav>
+    <button onclick="mostrar('Inicio')">Inicio</button>
+    <button onclick="mostrar('Productos')">Productos</button>
+    <button onclick="mostrar('Compras')">Compras</button>
+    <button onclick="mostrar('Ventas')">Ventas</button>
+    <button onclick="mostrar('Inventario')">Inventario</button>
+  </nav>
+
+  <main>
+    <section class="panel">
+      <h2 id="titulo">Panel Principal</h2>
+      <p id="descripcion">
+        Bienvenido al sistema de gestión del restaurante DR. JIBA.
+      </p>
+
+      <div class="cards" id="contenido">
+        <div class="card">
+          <h3>Productos</h3>
+          <p>—</p>
+        </div>
+
+        <div class="card">
+          <h3>Compras</h3>
+          <p>—</p>
+        </div>
+
+        <div class="card">
+          <h3>Ventas</h3>
+          <p>—</p>
+        </div>
+
+        <div class="card">
+          <h3>Inventario</h3>
+          <p>—</p>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    DR. JIBA - Sistema de Gestión
+  </footer>
+
+  <script>
+    function mostrar(modulo) {
+      document.getElementById("titulo").textContent = modulo;
+
+      document.getElementById("descripcion").textContent =
+        modulo === "Inicio"
+          ? "Bienvenido al sistema de gestión del restaurante DR. JIBA."
+          : "Módulo de " + modulo + " en preparación.";
+
+      document.getElementById("contenido").style.display =
+        modulo === "Inicio" ? "grid" : "none";
+    }
+  </script>
+
+</body>
+</html>

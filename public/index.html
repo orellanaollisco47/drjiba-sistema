@@ -187,6 +187,127 @@
       cursor: pointer;
     }
 
+    .resumen {
+      margin-top: 0;
+      margin-bottom: 22px;
+    }
+
+    .resumen .card p { font-size: 22px; }
+
+    .productos-layout {
+      display: grid;
+      grid-template-columns: minmax(0, 3fr) minmax(280px, 2fr);
+      gap: 22px;
+      align-items: start;
+    }
+
+    .productos-layout > * { min-width: 0; }
+
+    .productos-herramientas {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+
+    .productos-herramientas input,
+    .productos-herramientas select {
+      padding: 10px 12px;
+      border: 1px solid #d1d5db;
+      border-radius: 6px;
+      font-size: 15px;
+      background: white;
+    }
+
+    .productos-herramientas input { flex: 1 1 200px; }
+
+    .productos-contador {
+      color: #6b7280;
+      font-size: 14px;
+      margin: 10px 0 0;
+    }
+
+    #tablaProductos tbody tr[data-id] { cursor: pointer; }
+
+    #tablaProductos tbody tr[data-id]:hover,
+    #tablaProductos tbody tr[data-id]:focus {
+      background: #fee2e2;
+      outline: none;
+    }
+
+    #tablaProductos tbody tr.seleccionado {
+      background: #fecaca;
+      box-shadow: inset 4px 0 0 #991b1b;
+    }
+
+    .etiqueta {
+      display: inline-block;
+      padding: 4px 10px;
+      border-radius: 999px;
+      font-size: 13px;
+      font-weight: bold;
+      white-space: nowrap;
+    }
+
+    .etiqueta-agotado { background: #fee2e2; color: #b91c1c; }
+    .etiqueta-bajo { background: #fef3c7; color: #b45309; }
+    .etiqueta-disponible { background: #dcfce7; color: #15803d; }
+
+    .visor3d-panel {
+      background: linear-gradient(180deg, #fff7f7, #fde8e8);
+      border: 1px solid #fecaca;
+      border-radius: 12px;
+      padding: 16px;
+      position: sticky;
+      top: 20px;
+    }
+
+    .visor3d-panel h3 {
+      margin: 0 0 10px;
+      color: #7f1d1d;
+    }
+
+    .visor3d {
+      width: 100%;
+      height: 340px;
+      border-radius: 10px;
+      overflow: hidden;
+      background: radial-gradient(circle at 50% 35%, #ffffff, #fde2e2);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      touch-action: none;
+    }
+
+    .visor3d canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+      cursor: grab;
+    }
+
+    .visor3d canvas:active { cursor: grabbing; }
+
+    .visor3d canvas:focus-visible { outline: 3px solid #991b1b; }
+
+    .visor3d-fallback {
+      padding: 20px;
+      text-align: center;
+      color: #6b7280;
+    }
+
+    .visor3d-ayuda {
+      font-size: 13px;
+      color: #6b7280;
+      margin: 10px 0 0;
+      text-align: center;
+    }
+
+    @media (max-width: 820px) {
+      .productos-layout { grid-template-columns: minmax(0, 1fr); }
+      .visor3d-panel { position: static; order: -1; }
+      .visor3d { height: 280px; }
+    }
+
     footer {
       text-align: center;
       padding: 25px;
@@ -272,11 +393,29 @@
     DR. JIBA - Sistema de Gestión
   </footer>
 
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+        "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
+      }
+    }
+  </script>
+
+  <script
+    type="module"
+    src="js/productos3d.js"
+    onerror="window.DrJiba3DError = true; window.dispatchEvent(new Event('drjiba3d:error'));"
+  ></script>
+
   <script>
     const API = "";
 
     let tokenAcceso = sessionStorage.getItem("drjiba_token");
     let sesionActual = 0;
+    let vistaActual = 0;
+
+    const STOCK_BAJO = 5;
 
     const login = document.getElementById("seccionLogin");
     const sistema = document.getElementById("seccionSistema");
@@ -284,6 +423,8 @@
 
     function verLogin() {
       sesionActual++;
+      vistaActual++;
+      destruirVisor3D();
       tokenAcceso = null;
       sessionStorage.removeItem("drjiba_token");
       login.hidden = false;
@@ -430,6 +571,9 @@
         return;
       }
 
+      vistaActual++;
+      destruirVisor3D();
+
       const titulo = document.getElementById("titulo");
       const descripcion = document.getElementById("descripcion");
       const contenido = document.getElementById("contenido");
@@ -490,7 +634,12 @@
         return;
       }
 
-      if (modulo === "Productos" || modulo === "Inventario") {
+      if (modulo === "Productos") {
+        await mostrarProductos(vistaActual);
+        return;
+      }
+
+      if (modulo === "Inventario") {
         descripcion.textContent =
           "Información actualizada desde Supabase.";
 
@@ -574,6 +723,343 @@
         "Módulo de " + modulo + " en preparación.";
 
       contenido.style.display = "none";
+    }
+
+    // ========================================
+    // VISTA DE PRODUCTOS
+    // ========================================
+
+    function destruirVisor3D() {
+      if (window.DrJiba3D) {
+        window.DrJiba3D.destruir();
+      }
+    }
+
+    function estadoStock(stock) {
+      const cantidad = Number(stock || 0);
+      if (cantidad <= 0) return "agotado";
+      if (cantidad <= STOCK_BAJO) return "bajo";
+      return "disponible";
+    }
+
+    const TEXTO_ESTADO = {
+      agotado: "Agotado",
+      bajo: "Stock bajo",
+      disponible: "Disponible"
+    };
+
+    function formatoBs(valor) {
+      return "Bs " + Number(valor || 0).toFixed(2);
+    }
+
+    function normalizarTexto(texto) {
+      return String(texto ?? "")
+        .toLowerCase()
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "");
+    }
+
+    function crearTarjetaResumen(tituloTarjeta, valor) {
+      const tarjeta = document.createElement("div");
+      tarjeta.className = "card";
+
+      const h3 = document.createElement("h3");
+      h3.textContent = tituloTarjeta;
+
+      const p = document.createElement("p");
+      p.textContent = valor;
+
+      tarjeta.append(h3, p);
+      return tarjeta;
+    }
+
+    const ORDENES = {
+      "id": (a, b) => Number(a.id_producto) - Number(b.id_producto),
+      "nombre": (a, b) =>
+        String(a.nombre ?? "").localeCompare(String(b.nombre ?? ""), "es"),
+      "precio-asc": (a, b) =>
+        Number(a.precio_venta) - Number(b.precio_venta),
+      "precio-desc": (a, b) =>
+        Number(b.precio_venta) - Number(a.precio_venta),
+      "stock-asc": (a, b) =>
+        Number(a.stock_actual) - Number(b.stock_actual),
+      "stock-desc": (a, b) =>
+        Number(b.stock_actual) - Number(a.stock_actual)
+    };
+
+    function montarVisor3D(contenedor, vista, alMontar) {
+      function intentar() {
+        if (vista !== vistaActual || !contenedor.isConnected) return;
+
+        if (window.DrJiba3D.montar(contenedor)) {
+          alMontar();
+        }
+      }
+
+      if (window.DrJiba3D) {
+        intentar();
+        return;
+      }
+
+      function fallo() {
+        if (vista !== vistaActual || !contenedor.isConnected) return;
+        contenedor.innerHTML =
+          '<p class="visor3d-fallback">No se pudo cargar la vitrina 3D. Revisa tu conexión a internet.</p>';
+      }
+
+      if (window.DrJiba3DError) {
+        fallo();
+        return;
+      }
+
+      contenedor.innerHTML =
+        '<p class="visor3d-fallback">Cargando vitrina 3D...</p>';
+
+      window.addEventListener("drjiba3d:listo", intentar, { once: true });
+      window.addEventListener("drjiba3d:error", fallo, { once: true });
+    }
+
+    async function mostrarProductos(vista) {
+      const descripcion = document.getElementById("descripcion");
+      const contenido = document.getElementById("contenido");
+
+      descripcion.textContent =
+        "Catálogo de productos con vitrina 3D interactiva.";
+
+      contenido.style.display = "block";
+      contenido.innerHTML =
+        '<p class="mensaje">Cargando productos...</p>';
+
+      let productos;
+
+      try {
+        productos = await obtenerProductos();
+      } catch (error) {
+        console.error(error);
+        if (vista !== vistaActual) return;
+        contenido.innerHTML =
+          '<p class="mensaje">Error al cargar los productos. Intenta nuevamente.</p>';
+        return;
+      }
+
+      if (vista !== vistaActual) return;
+
+      contenido.innerHTML = "";
+
+      if (!Array.isArray(productos) || productos.length === 0) {
+        contenido.textContent = "No hay productos registrados.";
+        return;
+      }
+
+      productos = productos.map(producto => ({
+        ...producto,
+        estado: estadoStock(producto.stock_actual)
+      }));
+
+      // Tarjetas de resumen
+      const unidades = productos.reduce(
+        (total, p) => total + Number(p.stock_actual || 0), 0
+      );
+      const valorInventario = productos.reduce(
+        (total, p) =>
+          total + Number(p.precio_venta || 0) * Number(p.stock_actual || 0),
+        0
+      );
+      const agotados =
+        productos.filter(p => p.estado === "agotado").length;
+      const bajos =
+        productos.filter(p => p.estado === "bajo").length;
+
+      const resumen = document.createElement("div");
+      resumen.className = "cards resumen";
+      resumen.append(
+        crearTarjetaResumen("Productos", productos.length),
+        crearTarjetaResumen("Unidades en stock", unidades),
+        crearTarjetaResumen("Valor del inventario", formatoBs(valorInventario)),
+        crearTarjetaResumen("Agotados / stock bajo", agotados + " / " + bajos)
+      );
+
+      // Herramientas: buscador y orden
+      const layout = document.createElement("div");
+      layout.className = "productos-layout";
+
+      const lista = document.createElement("div");
+
+      const herramientas = document.createElement("div");
+      herramientas.className = "productos-herramientas";
+
+      const buscador = document.createElement("input");
+      buscador.type = "search";
+      buscador.id = "buscarProducto";
+      buscador.placeholder = "Buscar por nombre o ID...";
+      buscador.setAttribute("aria-label", "Buscar producto");
+
+      const orden = document.createElement("select");
+      orden.id = "ordenProductos";
+      orden.setAttribute("aria-label", "Ordenar productos");
+
+      [
+        ["id", "Ordenar por ID"],
+        ["nombre", "Nombre (A-Z)"],
+        ["precio-asc", "Precio: menor a mayor"],
+        ["precio-desc", "Precio: mayor a menor"],
+        ["stock-asc", "Stock: menor a mayor"],
+        ["stock-desc", "Stock: mayor a menor"]
+      ].forEach(([valor, texto]) => {
+        const opcion = document.createElement("option");
+        opcion.value = valor;
+        opcion.textContent = texto;
+        orden.appendChild(opcion);
+      });
+
+      herramientas.append(buscador, orden);
+
+      // Tabla
+      const contenedorTabla = document.createElement("div");
+      contenedorTabla.className = "tabla-contenedor";
+
+      const tabla = document.createElement("table");
+      tabla.id = "tablaProductos";
+
+      const encabezado = document.createElement("thead");
+      const filaEncabezado = document.createElement("tr");
+
+      ["ID", "Producto", "Precio de venta", "Stock actual", "Estado"]
+        .forEach(nombre => {
+          const th = document.createElement("th");
+          th.textContent = nombre;
+          filaEncabezado.appendChild(th);
+        });
+
+      encabezado.appendChild(filaEncabezado);
+      tabla.appendChild(encabezado);
+
+      const cuerpo = document.createElement("tbody");
+      tabla.appendChild(cuerpo);
+      contenedorTabla.appendChild(tabla);
+
+      const contador = document.createElement("p");
+      contador.className = "productos-contador";
+      contador.setAttribute("aria-live", "polite");
+
+      lista.append(herramientas, contenedorTabla, contador);
+
+      // Visor 3D
+      const panel = document.createElement("aside");
+      panel.className = "visor3d-panel";
+
+      const tituloVisor = document.createElement("h3");
+      tituloVisor.textContent = "Vitrina 3D";
+
+      const visor = document.createElement("div");
+      visor.className = "visor3d";
+      visor.id = "visor3d";
+
+      const ayuda = document.createElement("p");
+      ayuda.className = "visor3d-ayuda";
+      ayuda.textContent =
+        "Arrastra para rotar · Rueda o pellizco para zoom · Flechas ← → del teclado";
+
+      panel.append(tituloVisor, visor, ayuda);
+      layout.append(lista, panel);
+      contenido.append(resumen, layout);
+
+      let seleccionado = productos[0];
+
+      function seleccionar(producto) {
+        seleccionado = producto;
+
+        cuerpo.querySelectorAll("tr[data-id]").forEach(fila => {
+          const activo = fila.dataset.id === String(producto.id_producto);
+          fila.classList.toggle("seleccionado", activo);
+          fila.setAttribute("aria-selected", activo ? "true" : "false");
+        });
+
+        if (window.DrJiba3D) {
+          window.DrJiba3D.mostrarProducto(producto);
+        }
+      }
+
+      function dibujarFilas() {
+        const termino = normalizarTexto(buscador.value.trim());
+
+        const visibles = productos
+          .filter(p =>
+            !termino ||
+            normalizarTexto(p.nombre).includes(termino) ||
+            String(p.id_producto).includes(termino)
+          )
+          .sort(ORDENES[orden.value]);
+
+        cuerpo.innerHTML = "";
+
+        if (visibles.length === 0) {
+          const fila = document.createElement("tr");
+          const celda = document.createElement("td");
+          celda.colSpan = 5;
+          celda.textContent = "No se encontraron productos.";
+          fila.appendChild(celda);
+          cuerpo.appendChild(fila);
+        }
+
+        visibles.forEach(producto => {
+          const fila = document.createElement("tr");
+          fila.dataset.id = producto.id_producto;
+          fila.tabIndex = 0;
+
+          [
+            producto.id_producto,
+            producto.nombre,
+            formatoBs(producto.precio_venta),
+            producto.stock_actual
+          ].forEach((valor, indice) => {
+            const celda = document.createElement("td");
+            celda.textContent = valor;
+
+            if (indice === 3 && producto.estado === "agotado") {
+              celda.className = "stock-bajo";
+            }
+
+            fila.appendChild(celda);
+          });
+
+          const celdaEstado = document.createElement("td");
+          const etiqueta = document.createElement("span");
+          etiqueta.className = "etiqueta etiqueta-" + producto.estado;
+          etiqueta.textContent = TEXTO_ESTADO[producto.estado];
+          celdaEstado.appendChild(etiqueta);
+          fila.appendChild(celdaEstado);
+
+          fila.addEventListener("click", () => seleccionar(producto));
+          fila.addEventListener("keydown", evento => {
+            if (evento.key === "Enter" || evento.key === " ") {
+              evento.preventDefault();
+              seleccionar(producto);
+            }
+          });
+
+          cuerpo.appendChild(fila);
+        });
+
+        contador.textContent =
+          "Mostrando " + visibles.length + " de " + productos.length +
+          " productos";
+
+        if (seleccionado) {
+          seleccionar(seleccionado);
+        }
+      }
+
+      buscador.addEventListener("input", dibujarFilas);
+      orden.addEventListener("change", dibujarFilas);
+
+      dibujarFilas();
+
+      montarVisor3D(visor, vista, () => {
+        if (seleccionado) {
+          window.DrJiba3D.mostrarProducto(seleccionado);
+        }
+      });
     }
 
     validarSesion();

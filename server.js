@@ -17,6 +17,11 @@ app.use(express.static(path.join(__dirname, "public")));
 const supabaseUrl = process.env.SUPABASE_URL;
 const supabaseKey = process.env.SUPABASE_PUBLISHABLE_KEY;
 
+if (!supabaseUrl || !supabaseKey) {
+  console.error("Faltan variables de entorno de Supabase");
+  process.exit(1);
+}
+
 const supabase = createClient(supabaseUrl, supabaseKey, {
   auth: {
     persistSession: false,
@@ -24,12 +29,28 @@ const supabase = createClient(supabaseUrl, supabaseKey, {
   }
 });
 
+// Crear cliente con el token del usuario.
+// Las consultas respetan las politicas RLS.
+function clienteUsuario(token) {
+  return createClient(supabaseUrl, supabaseKey, {
+    global: {
+      headers: {
+        Authorization: `Bearer ${token}`
+      }
+    },
+    auth: {
+      persistSession: false,
+      autoRefreshToken: false
+    }
+  });
+}
+
 // ========================================
-// VERIFICAR FUNCIONAMIENTO DEL SERVIDOR
+// VERIFICAR ESTADO DEL SERVIDOR
 // ========================================
 
 app.get("/api/estado", (req, res) => {
-  res.json({
+  return res.json({
     sistema: "DR. JIBA",
     estado: "activo",
     mensaje: "Servidor funcionando correctamente"
@@ -37,18 +58,168 @@ app.get("/api/estado", (req, res) => {
 });
 
 // ========================================
-// CONSULTAR PRODUCTOS DE SUPABASE
+// INICIAR SESION
 // ========================================
 
-app.get("/api/productos", async (req, res) => {
+app.post("/api/login", async (req, res) => {
   try {
-    const { data, error } = await supabase
-      .from("products")
-      .select("id_producto, nombre, precio_venta, stock_actual")
-      .order("id_producto");
+    const { email, password } = req.body || {};
+
+    if (
+      typeof email !== "string" ||
+      typeof password !== "string" ||
+      !email.trim() ||
+      !password
+    ) {
+      return res.status(400).json({
+        error: "Ingresa tu correo y contraseña"
+      });
+    }
+
+    const { data, error } =
+      await supabase.auth.signInWithPassword({
+        email: email.trim(),
+        password
+      });
+
+    if (error || !data.session || !data.user) {
+      return res.status(401).json({
+        error: "Correo o contraseña incorrectos"
+      });
+    }
+
+    const token = data.session.access_token;
+    const usuarioDb = clienteUsuario(token);
+
+    // Comprobar que el usuario tenga un perfil activo
+    const { data: perfil, error: perfilError } =
+      await usuarioDb
+        .from("user_profiles")
+        .select("nombre_completo, rol, activo")
+        .eq("id_usuario", data.user.id)
+        .single();
+
+    if (perfilError || !perfil || !perfil.activo) {
+      console.error(
+        "Perfil no disponible:",
+        perfilError?.message || "Perfil inactivo"
+      );
+
+      return res.status(403).json({
+        error: "Usuario sin perfil activo o sin permisos"
+      });
+    }
+
+    return res.json({
+      access_token: token,
+      nombre_completo: perfil.nombre_completo,
+      rol: perfil.rol
+    });
+
+  } catch (error) {
+    console.error("Error de login:", error.message);
+
+    return res.status(500).json({
+      error: "No se pudo iniciar sesión"
+    });
+  }
+});
+
+// ========================================
+// VERIFICAR TOKEN Y PERFIL
+// ========================================
+
+async function verificarSesion(req, res, next) {
+  try {
+    const autorizacion = req.headers.authorization || "";
+
+    if (!autorizacion.startsWith("Bearer ")) {
+      return res.status(401).json({
+        error: "Debes iniciar sesión"
+      });
+    }
+
+    const token = autorizacion.slice(7).trim();
+
+    if (!token) {
+      return res.status(401).json({
+        error: "Debes iniciar sesión"
+      });
+    }
+
+    const { data, error } =
+      await supabase.auth.getUser(token);
+
+    if (error || !data.user) {
+      return res.status(401).json({
+        error: "Sesión inválida o vencida"
+      });
+    }
+
+    const usuarioDb = clienteUsuario(token);
+
+    const { data: perfil, error: perfilError } =
+      await usuarioDb
+        .from("user_profiles")
+        .select("nombre_completo, rol, activo")
+        .eq("id_usuario", data.user.id)
+        .single();
+
+    if (perfilError || !perfil || !perfil.activo) {
+      return res.status(403).json({
+        error: "Usuario sin perfil activo o sin permisos"
+      });
+    }
+
+    req.usuario = data.user;
+    req.perfil = perfil;
+    req.supabaseUsuario = usuarioDb;
+
+    next();
+
+  } catch (error) {
+    console.error(
+      "Error al verificar sesión:",
+      error.message
+    );
+
+    return res.status(500).json({
+      error: "No se pudo verificar la sesión"
+    });
+  }
+}
+
+// ========================================
+// CONSULTAR PERFIL
+// ========================================
+
+app.get("/api/mi-perfil", verificarSesion, (req, res) => {
+  return res.json({
+    nombre_completo: req.perfil.nombre_completo,
+    rol: req.perfil.rol,
+    activo: req.perfil.activo
+  });
+});
+
+// ========================================
+// CONSULTAR PRODUCTOS
+// ========================================
+
+app.get("/api/productos", verificarSesion, async (req, res) => {
+  try {
+    const { data, error } =
+      await req.supabaseUsuario
+        .from("products")
+        .select(
+          "id_producto, nombre, precio_venta, stock_actual"
+        )
+        .order("id_producto");
 
     if (error) {
-      console.error("Error Supabase:", error.message);
+      console.error(
+        "Error al consultar productos:",
+        error.message
+      );
 
       return res.status(500).json({
         error: "No se pudieron consultar los productos"
@@ -67,99 +238,13 @@ app.get("/api/productos", async (req, res) => {
 });
 
 // ========================================
-// PASO 73: VERIFICAR USUARIO Y ROL
+// RESPUESTA JSON PARA RUTAS API DESCONOCIDAS
 // ========================================
 
-app.get("/api/mi-perfil", async (req, res) => {
-  try {
-    const autorizacion = req.headers.authorization || "";
-
-    // Comprobar que se envio un token
-    if (!autorizacion.startsWith("Bearer ")) {
-      return res.status(401).json({
-        error: "Debes iniciar sesión"
-      });
-    }
-
-    const token = autorizacion.substring(7).trim();
-
-    if (!token) {
-      return res.status(401).json({
-        error: "Debes iniciar sesión"
-      });
-    }
-
-    // Verificar el token con Supabase Auth
-    const { data: authData, error: authError } =
-      await supabase.auth.getUser(token);
-
-    if (authError || !authData.user) {
-      return res.status(401).json({
-        error: "Sesión inválida o vencida"
-      });
-    }
-
-    // Crear cliente con el token del usuario
-    // para respetar las politicas RLS
-    const supabaseUsuario = createClient(
-      supabaseUrl,
-      supabaseKey,
-      {
-        global: {
-          headers: {
-            Authorization: `Bearer ${token}`
-          }
-        },
-        auth: {
-          persistSession: false,
-          autoRefreshToken: false
-        }
-      }
-    );
-
-    // Consultar el perfil del usuario
-    const { data: perfil, error: perfilError } =
-      await supabaseUsuario
-        .from("user_profiles")
-        .select("nombre_completo, rol, activo")
-        .eq("id_usuario", authData.user.id)
-        .single();
-
-    if (perfilError) {
-      console.error(
-        "Error al consultar perfil:",
-        perfilError.message
-      );
-
-      return res.status(403).json({
-        error: "No se pudo consultar el perfil del usuario"
-      });
-    }
-
-    // Verificar que el perfil exista y este activo
-    if (!perfil || !perfil.activo) {
-      return res.status(403).json({
-        error: "Usuario sin perfil activo o sin permisos"
-      });
-    }
-
-    // Devolver datos basicos del usuario
-    return res.json({
-      nombre: perfil.nombre_completo,
-      rol: perfil.rol,
-      activo: perfil.activo
-    });
-
-  } catch (error) {
-    console.error(
-      "Error al verificar usuario:",
-      error.message
-    );
-
-    return res.status(500).json({
-      error: "No se pudo verificar el usuario"
-    });
-  }
+app.use("/api", (req, res) => {
+  return res.status(404).json({
+    error: "Ruta API no encontrada"
+  });
 });
 
 // ========================================

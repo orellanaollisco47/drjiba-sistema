@@ -308,6 +308,17 @@
       .visor3d { height: 280px; }
     }
 
+
+    /* Modulo de compras */
+    .compras-formulario { display:grid; grid-template-columns:repeat(auto-fit,minmax(210px,1fr)); gap:14px; margin:18px 0; }
+    .compras-campo label { display:block; font-weight:bold; margin-bottom:7px; }
+    .compras-campo input, .compras-campo select { width:100%; padding:11px; border:1px solid #d1d5db; border-radius:6px; background:white; }
+    .compras-acciones { display:flex; gap:10px; flex-wrap:wrap; margin:16px 0; }
+    .compras-acciones button { border:0; border-radius:6px; padding:12px 16px; background:#991b1b; color:white; font-weight:bold; cursor:pointer; }
+    .compras-acciones button:disabled { opacity:.5; cursor:not-allowed; }
+    .compras-total { text-align:right; font-size:22px; font-weight:bold; color:#7f1d1d; }
+    .compras-aviso { padding:12px; background:#fff7ed; border-left:4px solid #d97706; border-radius:6px; margin:15px 0; }
+
     footer {
       text-align: center;
       padding: 25px;
@@ -639,6 +650,11 @@
         return;
       }
 
+      if (modulo === "Compras") {
+        await mostrarCompras(vistaActual);
+        return;
+      }
+
       if (modulo === "Inventario") {
         descripcion.textContent =
           "Información actualizada desde Supabase.";
@@ -723,6 +739,128 @@
         "Módulo de " + modulo + " en preparación.";
 
       contenido.style.display = "none";
+    }
+
+
+    // ========================================
+    // MODULO DE COMPRAS (VISTA PRELIMINAR)
+    // ========================================
+    async function mostrarCompras(vista) {
+      const descripcion = document.getElementById("descripcion");
+      const contenido = document.getElementById("contenido");
+      descripcion.textContent = "Prepara una compra y calcula su importe antes de registrarla.";
+      contenido.style.display = "block";
+      contenido.innerHTML = '<p class="mensaje">Cargando catálogo...</p>';
+
+      let productos;
+      try {
+        productos = await obtenerProductos();
+      } catch (error) {
+        if (vista !== vistaActual) return;
+        contenido.textContent = "No se pudo cargar el catálogo de productos.";
+        return;
+      }
+      if (vista !== vistaActual) return;
+      contenido.innerHTML = `
+        <div class="compras-aviso" role="status">
+          Vista de preparación: todavía no registra compras ni modifica el inventario.
+          Conectaremos el guardado seguro y los proveedores en el siguiente paso.
+        </div>
+        <h3>Nueva compra</h3>
+        <div class="compras-formulario">
+          <div class="compras-campo">
+            <label for="compraProveedor">Proveedor</label>
+            <input id="compraProveedor" type="text" placeholder="Nombre del proveedor (referencia)" maxlength="120">
+          </div>
+          <div class="compras-campo">
+            <label for="compraProducto">Producto</label>
+            <select id="compraProducto"></select>
+          </div>
+          <div class="compras-campo">
+            <label for="compraCantidad">Cantidad</label>
+            <input id="compraCantidad" type="number" min="1" step="1" value="1">
+          </div>
+          <div class="compras-campo">
+            <label for="compraPrecio">Precio de compra (Bs)</label>
+            <input id="compraPrecio" type="number" min="0" step="0.01" placeholder="0.00">
+          </div>
+        </div>
+        <div class="compras-acciones">
+          <button type="button" id="agregarDetalleCompra">Agregar producto</button>
+          <button type="button" id="limpiarDetalleCompra">Limpiar lista</button>
+        </div>
+        <p id="mensajeCompra" aria-live="polite"></p>
+        <div class="tabla-contenedor">
+          <table>
+            <thead><tr><th>Producto</th><th>Cantidad</th><th>Precio unitario</th><th>Subtotal</th><th>Acción</th></tr></thead>
+            <tbody id="detallesCompra"><tr><td colspan="5">Todavía no agregaste productos.</td></tr></tbody>
+          </table>
+        </div>
+        <p class="compras-total" id="totalCompra">Total: Bs 0.00</p>
+        <div class="compras-acciones">
+          <button type="button" disabled title="Pendiente de conexión segura con Supabase">Guardar borrador (próximamente)</button>
+          <button type="button" disabled title="Pendiente de conexión segura con Supabase">Confirmar compra (próximamente)</button>
+        </div>`;
+
+      const selector = document.getElementById("compraProducto");
+      const cantidad = document.getElementById("compraCantidad");
+      const precio = document.getElementById("compraPrecio");
+      const mensaje = document.getElementById("mensajeCompra");
+      const cuerpo = document.getElementById("detallesCompra");
+      const detalles = [];
+
+      productos.forEach(producto => {
+        const opcion = document.createElement("option");
+        opcion.value = String(producto.id_producto);
+        opcion.textContent = producto.nombre;
+        selector.appendChild(opcion);
+      });
+      if (!productos.length) {
+        selector.disabled = true;
+        document.getElementById("agregarDetalleCompra").disabled = true;
+        mensaje.textContent = "No hay productos registrados.";
+      }
+
+      function dibujarDetalles() {
+        cuerpo.replaceChildren();
+        if (!detalles.length) {
+          const fila = cuerpo.insertRow();
+          const celda = fila.insertCell();
+          celda.colSpan = 5;
+          celda.textContent = "Todavía no agregaste productos.";
+        }
+        detalles.forEach((item, indice) => {
+          const fila = cuerpo.insertRow();
+          [item.nombre, item.cantidad, formatoBs(item.precio), formatoBs(item.cantidad * item.precio)]
+            .forEach(valor => { fila.insertCell().textContent = valor; });
+          const boton = document.createElement("button");
+          boton.type = "button";
+          boton.textContent = "Quitar";
+          boton.addEventListener("click", () => { detalles.splice(indice, 1); dibujarDetalles(); });
+          fila.insertCell().appendChild(boton);
+        });
+        const total = detalles.reduce((acumulado, item) => acumulado + item.cantidad * item.precio, 0);
+        document.getElementById("totalCompra").textContent = "Total: " + formatoBs(total);
+      }
+
+      document.getElementById("agregarDetalleCompra").addEventListener("click", () => {
+        const producto = productos.find(p => String(p.id_producto) === selector.value);
+        const unidades = Number(cantidad.value);
+        const costo = Number(precio.value);
+        if (!producto || !Number.isSafeInteger(unidades) || unidades <= 0 ||
+            precio.value.trim() === "" || !Number.isFinite(costo) || costo < 0) {
+          mensaje.textContent = "Selecciona un producto, una cantidad entera positiva y un precio válido.";
+          return;
+        }
+        detalles.push({ id_producto: producto.id_producto, nombre: producto.nombre, cantidad: unidades, precio: costo });
+        mensaje.textContent = "Producto agregado a la lista preliminar.";
+        dibujarDetalles();
+      });
+      document.getElementById("limpiarDetalleCompra").addEventListener("click", () => {
+        detalles.length = 0;
+        mensaje.textContent = "Lista vaciada.";
+        dibujarDetalles();
+      });
     }
 
     // ========================================

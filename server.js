@@ -17,8 +17,30 @@ app.use(express.static(path.join(__dirname, "public")));
 const supabaseUrl = process.env.SUPABASE_URL;
 const supabaseKey = process.env.SUPABASE_PUBLISHABLE_KEY;
 
+// ========================================
+// DIAGNOSTICO DE VARIABLES EN VERCEL
+// ========================================
+
+// Solo muestra true o false.
+// No muestra el contenido de las claves.
+
+console.log("====================================");
+console.log("DIAGNOSTICO SUPABASE - DR. JIBA");
+
+console.log(
+  "SUPABASE_URL disponible:",
+  Boolean(supabaseUrl)
+);
+
+console.log(
+  "SUPABASE_PUBLISHABLE_KEY disponible:",
+  Boolean(supabaseKey)
+);
+
+console.log("====================================");
+
 if (!supabaseUrl || !supabaseKey) {
-  console.error("Faltan variables de entorno de Supabase");
+  console.error("ERROR DE CONFIGURACION DE SUPABASE");
   process.exit(1);
 }
 

@@ -743,34 +743,41 @@
 
 
     // ========================================
-    // MODULO DE COMPRAS (VISTA PRELIMINAR)
+    // MODULO DE COMPRAS
     // ========================================
     async function mostrarCompras(vista) {
       const descripcion = document.getElementById("descripcion");
       const contenido = document.getElementById("contenido");
-      descripcion.textContent = "Prepara una compra y calcula su importe antes de registrarla.";
+      descripcion.textContent = "Registra una compra en borrador sin modificar el inventario.";
       contenido.style.display = "block";
-      contenido.innerHTML = '<p class="mensaje">Cargando catálogo...</p>';
+      contenido.innerHTML = '<p class="mensaje">Cargando productos y proveedores...</p>';
 
-      let productos;
+      let productos, proveedores;
       try {
-        productos = await obtenerProductos();
+        [productos, proveedores] = await Promise.all([
+          obtenerProductos(),
+          peticionProtegida("/api/proveedores")
+        ]);
       } catch (error) {
         if (vista !== vistaActual) return;
-        contenido.textContent = "No se pudo cargar el catálogo de productos.";
+        contenido.textContent = "No se pudieron cargar los datos de compras: " + error.message;
         return;
       }
       if (vista !== vistaActual) return;
+
       contenido.innerHTML = `
         <div class="compras-aviso" role="status">
-          Vista de preparación: todavía no registra compras ni modifica el inventario.
-          Conectaremos el guardado seguro y los proveedores en el siguiente paso.
+          Guardar borrador registra la compra sin aumentar el stock. La confirmación se habilitará después de verificar sus permisos.
         </div>
         <h3>Nueva compra</h3>
         <div class="compras-formulario">
           <div class="compras-campo">
             <label for="compraProveedor">Proveedor</label>
-            <input id="compraProveedor" type="text" placeholder="Nombre del proveedor (referencia)" maxlength="120">
+            <select id="compraProveedor"></select>
+          </div>
+          <div class="compras-campo">
+            <label for="compraObservaciones">Observaciones (opcional)</label>
+            <input id="compraObservaciones" type="text" maxlength="500" placeholder="Detalle de la compra">
           </div>
           <div class="compras-campo">
             <label for="compraProducto">Producto</label>
@@ -798,34 +805,34 @@
         </div>
         <p class="compras-total" id="totalCompra">Total: Bs 0.00</p>
         <div class="compras-acciones">
-          <button type="button" disabled title="Pendiente de conexión segura con Supabase">Guardar borrador (próximamente)</button>
-          <button type="button" disabled title="Pendiente de conexión segura con Supabase">Confirmar compra (próximamente)</button>
+          <button type="button" id="guardarBorradorCompra">Guardar borrador</button>
+          <button type="button" disabled title="Pendiente de revisión de permisos">Confirmar compra (próximamente)</button>
         </div>`;
 
       const selector = document.getElementById("compraProducto");
+      const proveedorSelect = document.getElementById("compraProveedor");
       const cantidad = document.getElementById("compraCantidad");
       const precio = document.getElementById("compraPrecio");
       const mensaje = document.getElementById("mensajeCompra");
       const cuerpo = document.getElementById("detallesCompra");
+      const guardar = document.getElementById("guardarBorradorCompra");
       const detalles = [];
+      let guardando = false;
 
-      productos.forEach(producto => {
-        const opcion = document.createElement("option");
-        opcion.value = String(producto.id_producto);
-        opcion.textContent = producto.nombre;
-        selector.appendChild(opcion);
+      proveedorSelect.add(new Option("Selecciona un proveedor", ""));
+      proveedores.filter(p => p.activo !== false).forEach(p => {
+        proveedorSelect.add(new Option(p.nombre, String(p.id_proveedor)));
       });
-      if (!productos.length) {
-        selector.disabled = true;
-        document.getElementById("agregarDetalleCompra").disabled = true;
-        mensaje.textContent = "No hay productos registrados.";
+      productos.forEach(p => selector.add(new Option(p.nombre, String(p.id_producto))));
+      if (!productos.length || proveedores.filter(p => p.activo !== false).length === 0) {
+        guardar.disabled = true;
+        mensaje.textContent = "Necesitas al menos un producto y un proveedor activo.";
       }
 
       function dibujarDetalles() {
         cuerpo.replaceChildren();
         if (!detalles.length) {
-          const fila = cuerpo.insertRow();
-          const celda = fila.insertCell();
+          const celda = cuerpo.insertRow().insertCell();
           celda.colSpan = 5;
           celda.textContent = "Todavía no agregaste productos.";
         }
@@ -836,30 +843,97 @@
           const boton = document.createElement("button");
           boton.type = "button";
           boton.textContent = "Quitar";
-          boton.addEventListener("click", () => { detalles.splice(indice, 1); dibujarDetalles(); });
+          boton.disabled = guardando;
+          boton.addEventListener("click", () => {
+            detalles.splice(indice, 1);
+            dibujarDetalles();
+          });
           fila.insertCell().appendChild(boton);
         });
-        const total = detalles.reduce((acumulado, item) => acumulado + item.cantidad * item.precio, 0);
+        const total = detalles.reduce((suma, item) => suma + item.cantidad * item.precio, 0);
         document.getElementById("totalCompra").textContent = "Total: " + formatoBs(total);
       }
 
       document.getElementById("agregarDetalleCompra").addEventListener("click", () => {
+        if (guardando) return;
         const producto = productos.find(p => String(p.id_producto) === selector.value);
         const unidades = Number(cantidad.value);
         const costo = Number(precio.value);
         if (!producto || !Number.isSafeInteger(unidades) || unidades <= 0 ||
-            precio.value.trim() === "" || !Number.isFinite(costo) || costo < 0) {
+            precio.value.trim() === "" || !Number.isFinite(costo) || costo < 0 ||
+            !Number.isInteger(Math.round(costo * 100))) {
           mensaje.textContent = "Selecciona un producto, una cantidad entera positiva y un precio válido.";
           return;
         }
+        if (detalles.some(d => d.id_producto === producto.id_producto)) {
+          mensaje.textContent = "Ese producto ya está agregado. Quítalo para cambiar su cantidad.";
+          return;
+        }
         detalles.push({ id_producto: producto.id_producto, nombre: producto.nombre, cantidad: unidades, precio: costo });
-        mensaje.textContent = "Producto agregado a la lista preliminar.";
+        mensaje.textContent = "Producto agregado a la lista.";
         dibujarDetalles();
       });
+
       document.getElementById("limpiarDetalleCompra").addEventListener("click", () => {
+        if (guardando) return;
         detalles.length = 0;
         mensaje.textContent = "Lista vaciada.";
         dibujarDetalles();
+      });
+
+      guardar.addEventListener("click", async () => {
+        if (guardando) return;
+        const idProveedor = Number(proveedorSelect.value);
+        if (!Number.isSafeInteger(idProveedor) || idProveedor <= 0) {
+          mensaje.textContent = "Selecciona un proveedor.";
+          return;
+        }
+        if (!detalles.length) {
+          mensaje.textContent = "Agrega al menos un producto.";
+          return;
+        }
+        guardando = true;
+        guardar.disabled = true;
+        guardar.textContent = "Guardando...";
+        mensaje.textContent = "Registrando borrador...";
+        dibujarDetalles();
+        try {
+          const respuesta = await fetch(API + "/api/compras", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: "Bearer " + tokenAcceso
+            },
+            body: JSON.stringify({
+              id_proveedor: idProveedor,
+              observaciones: document.getElementById("compraObservaciones").value.trim() || null,
+              productos: detalles.map(d => ({
+                id_producto: d.id_producto,
+                cantidad: d.cantidad,
+                precio_unitario: d.precio
+              }))
+            })
+          });
+          const resultado = await respuesta.json().catch(() => ({}));
+          if (respuesta.status === 401) {
+            verLogin();
+            throw new Error("La sesión ha expirado.");
+          }
+          if (!respuesta.ok) throw new Error(resultado.error || "No se pudo guardar la compra.");
+          if (vista !== vistaActual) return;
+          detalles.length = 0;
+          dibujarDetalles();
+          mensaje.textContent = "Borrador guardado correctamente. Compra N.º " + resultado.id_compra + ". El inventario no se ha modificado.";
+        } catch (error) {
+          if (vista === vistaActual) mensaje.textContent = "Error: " + error.message;
+        } finally {
+          guardando = false;
+          if (vista === vistaActual) {
+            guardar.disabled = false;
+            guardar.textContent = "Guardar borrador";
+            dibujarDetalles();
+          }
+        }
       });
     }
 

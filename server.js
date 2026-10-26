@@ -411,6 +411,43 @@ app.post("/api/compras", verificarSesion, async (req, res) => {
   }
 });
 
+ // ========================================
+ // CONSULTAR PROVEEDORES ACTIVOS
+ // ========================================
+
+app.get("/api/proveedores", verificarSesion, async (req, res) => {
+  try {
+    if (!["ADMINISTRADOR", "ALMACEN"].includes(req.perfil.rol)) {
+      return res.status(403).json({
+        error: "No tienes permisos para consultar proveedores"
+      });
+    }
+
+    const { data, error } = await req.supabaseUsuario
+      .from("suppliers")
+      .select("id_proveedor, nombre, activo")
+      .eq("activo", true)
+      .order("nombre", { ascending: true });
+
+    if (error) {
+      console.error("Error al consultar proveedores:", error.message);
+
+      return res.status(500).json({
+        error: "No se pudieron consultar los proveedores"
+      });
+    }
+
+    return res.json(data || []);
+
+  } catch (error) {
+    console.error("Error interno al consultar proveedores:", error.message);
+
+    return res.status(500).json({
+      error: "Error interno del servidor"
+    });
+  }
+});
+
 // ========================================
 // RESPUESTA JSON PARA RUTAS API DESCONOCIDAS
 // ========================================

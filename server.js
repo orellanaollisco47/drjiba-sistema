@@ -410,7 +410,58 @@ app.post("/api/compras", verificarSesion, async (req, res) => {
     });
   }
 });
+// ========================================
+// CONFIRMAR COMPRA Y ACTUALIZAR INVENTARIO
+// ========================================
 
+app.post("/api/compras/:id/confirmar", verificarSesion, async (req, res) => {
+  try {
+    // Verificar permisos
+    if (!["ADMINISTRADOR", "ALMACEN"].includes(req.perfil.rol)) {
+      return res.status(403).json({
+        error: "No tienes permisos para confirmar compras"
+      });
+    }
+
+    // Validar identificador de compra
+    const idCompra = Number(req.params.id);
+
+    if (!Number.isSafeInteger(idCompra) || idCompra <= 0) {
+      return res.status(400).json({
+        error: "El número de compra no es válido"
+      });
+    }
+
+    // Confirmar mediante la función autorizada de Supabase
+    const { error } = await req.supabaseUsuario.rpc(
+      "confirmar_compra_autorizada",
+      {
+        p_id_compra: idCompra
+      }
+    );
+
+    if (error) {
+      console.error("Error al confirmar compra:", error.message);
+
+      return res.status(400).json({
+        error: "No se pudo confirmar la compra. Verifica su estado y tus permisos."
+      });
+    }
+
+    return res.json({
+      mensaje: "Compra confirmada correctamente",
+      id_compra: idCompra,
+      estado: "CONFIRMADA"
+    });
+
+  } catch (error) {
+    console.error("Error interno al confirmar compra:", error.message);
+
+    return res.status(500).json({
+      error: "Error interno al confirmar la compra"
+    });
+  }
+});
  // ========================================
  // CONSULTAR PROVEEDORES ACTIVOS
  // ========================================

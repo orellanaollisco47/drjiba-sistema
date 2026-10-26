@@ -748,7 +748,7 @@
     async function mostrarCompras(vista) {
       const descripcion = document.getElementById("descripcion");
       const contenido = document.getElementById("contenido");
-      descripcion.textContent = "Registra una compra en borrador sin modificar el inventario.";
+      descripcion.textContent = "Registra compras en borrador y confirma una compra guardada para actualizar el inventario.";
       contenido.style.display = "block";
       contenido.innerHTML = '<p class="mensaje">Cargando productos y proveedores...</p>';
 
@@ -767,7 +767,7 @@
 
       contenido.innerHTML = `
         <div class="compras-aviso" role="status">
-          Guardar borrador registra la compra sin aumentar el stock. La confirmación se habilitará después de verificar sus permisos.
+          Guardar borrador no modifica el stock. Confirmar una compra guardada aumenta el inventario y registra sus movimientos. Revisa bien los datos antes de confirmar.
         </div>
         <h3>Nueva compra</h3>
         <div class="compras-formulario">
@@ -806,8 +806,9 @@
         <p class="compras-total" id="totalCompra">Total: Bs 0.00</p>
         <div class="compras-acciones">
           <button type="button" id="guardarBorradorCompra">Guardar borrador</button>
-          <button type="button" disabled title="Pendiente de revisión de permisos">Confirmar compra (próximamente)</button>
-        </div>`;
+          <button type="button" id="confirmarCompra" disabled title="Primero guarda una compra como borrador">Confirmar compra</button>
+        </div>
+        <p id="compraPendiente" aria-live="polite">No hay una compra pendiente de confirmación en esta pantalla.</p>`;
 
       const selector = document.getElementById("compraProducto");
       const proveedorSelect = document.getElementById("compraProveedor");
@@ -816,8 +817,19 @@
       const mensaje = document.getElementById("mensajeCompra");
       const cuerpo = document.getElementById("detallesCompra");
       const guardar = document.getElementById("guardarBorradorCompra");
+      const confirmar = document.getElementById("confirmarCompra");
+      const compraPendiente = document.getElementById("compraPendiente");
       const detalles = [];
       let guardando = false;
+      let confirmando = false;
+      let idCompraGuardada = null;
+
+      function actualizarConfirmacion() {
+        confirmar.disabled = guardando || confirmando || idCompraGuardada === null;
+        compraPendiente.textContent = idCompraGuardada === null
+          ? "No hay una compra pendiente de confirmación en esta pantalla."
+          : "Compra N.º " + idCompraGuardada + " guardada como BORRADOR y pendiente de confirmación.";
+      }
 
       proveedorSelect.add(new Option("Selecciona un proveedor", ""));
       proveedores.filter(p => p.activo !== false).forEach(p => {
@@ -843,7 +855,7 @@
           const boton = document.createElement("button");
           boton.type = "button";
           boton.textContent = "Quitar";
-          boton.disabled = guardando;
+          boton.disabled = guardando || confirmando;
           boton.addEventListener("click", () => {
             detalles.splice(indice, 1);
             dibujarDetalles();
@@ -855,7 +867,7 @@
       }
 
       document.getElementById("agregarDetalleCompra").addEventListener("click", () => {
-        if (guardando) return;
+        if (guardando || confirmando) return;
         const producto = productos.find(p => String(p.id_producto) === selector.value);
         const unidades = Number(cantidad.value);
         const costo = Number(precio.value);
@@ -875,14 +887,14 @@
       });
 
       document.getElementById("limpiarDetalleCompra").addEventListener("click", () => {
-        if (guardando) return;
+        if (guardando || confirmando) return;
         detalles.length = 0;
         mensaje.textContent = "Lista vaciada.";
         dibujarDetalles();
       });
 
       guardar.addEventListener("click", async () => {
-        if (guardando) return;
+        if (guardando || confirmando) return;
         const idProveedor = Number(proveedorSelect.value);
         if (!Number.isSafeInteger(idProveedor) || idProveedor <= 0) {
           mensaje.textContent = "Selecciona un proveedor.";
@@ -895,6 +907,7 @@
         guardando = true;
         guardar.disabled = true;
         guardar.textContent = "Guardando...";
+        actualizarConfirmacion();
         mensaje.textContent = "Registrando borrador...";
         dibujarDetalles();
         try {
@@ -921,9 +934,15 @@
           }
           if (!respuesta.ok) throw new Error(resultado.error || "No se pudo guardar la compra.");
           if (vista !== vistaActual) return;
+          const nuevoId = Number(resultado.id_compra);
+          if (!Number.isSafeInteger(nuevoId) || nuevoId <= 0) {
+            throw new Error("El servidor guardó la compra, pero no devolvió un número válido. Consulta Supabase antes de repetir el guardado.");
+          }
+          idCompraGuardada = nuevoId;
           detalles.length = 0;
           dibujarDetalles();
-          mensaje.textContent = "Borrador guardado correctamente. Compra N.º " + resultado.id_compra + ". El inventario no se ha modificado.";
+          actualizarConfirmacion();
+          mensaje.textContent = "Borrador guardado correctamente. Compra N.º " + nuevoId + ". El inventario no se ha modificado.";
         } catch (error) {
           if (vista === vistaActual) mensaje.textContent = "Error: " + error.message;
         } finally {
@@ -931,6 +950,65 @@
           if (vista === vistaActual) {
             guardar.disabled = false;
             guardar.textContent = "Guardar borrador";
+            actualizarConfirmacion();
+            dibujarDetalles();
+          }
+        }
+      });
+
+      confirmar.addEventListener("click", async () => {
+        if (guardando || confirmando || idCompraGuardada === null) return;
+        const idAConfirmar = idCompraGuardada;
+        if (!Number.isSafeInteger(idAConfirmar) || idAConfirmar <= 0) {
+          mensaje.textContent = "Número de compra inválido.";
+          return;
+        }
+        const aceptado = window.confirm(
+          "¿Confirmar la compra N.º " + idAConfirmar + "?\n\n" +
+          "Esta acción aumentará el stock, registrará entradas en el inventario " +
+          "y no se podrá repetir."
+        );
+        if (!aceptado) return;
+
+        confirmando = true;
+        confirmar.textContent = "Confirmando...";
+        guardar.disabled = true;
+        actualizarConfirmacion();
+        mensaje.textContent = "Confirmando compra N.º " + idAConfirmar + "...";
+        dibujarDetalles();
+
+        try {
+          const respuesta = await fetch(
+            API + "/api/compras/" + encodeURIComponent(idAConfirmar) + "/confirmar",
+            {
+              method: "POST",
+              headers: { Authorization: "Bearer " + tokenAcceso }
+            }
+          );
+          const resultado = await respuesta.json().catch(() => ({}));
+          if (respuesta.status === 401) {
+            verLogin();
+            throw new Error("La sesión ha expirado.");
+          }
+          if (!respuesta.ok) {
+            throw new Error(resultado.error || "No se pudo confirmar la compra.");
+          }
+          idCompraGuardada = null;
+          if (vista === vistaActual) {
+            mensaje.textContent = "Compra N.º " + idAConfirmar +
+              " confirmada correctamente. El inventario fue actualizado.";
+          }
+        } catch (error) {
+          if (vista === vistaActual) {
+            mensaje.textContent = "Error: " + error.message +
+              " Si la solicitud se interrumpió, revisa el estado en Supabase antes de reintentar.";
+          }
+        } finally {
+          confirmando = false;
+          if (vista === vistaActual) {
+            confirmar.textContent = "Confirmar compra";
+            guardar.disabled = !productos.length || !proveedores.some(p => p.activo !== false);
+            actualizarConfirmacion();
             dibujarDetalles();
           }
         }

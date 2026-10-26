@@ -21,9 +21,6 @@ const supabaseKey = process.env.SUPABASE_PUBLISHABLE_KEY;
 // DIAGNOSTICO DE VARIABLES EN VERCEL
 // ========================================
 
-// Solo muestra true o false.
-// No muestra el contenido de las claves.
-
 console.log("====================================");
 console.log("DIAGNOSTICO SUPABASE - DR. JIBA");
 
@@ -113,7 +110,6 @@ app.post("/api/login", async (req, res) => {
     const token = data.session.access_token;
     const usuarioDb = clienteUsuario(token);
 
-    // Comprobar que el usuario tenga un perfil activo
     const { data: perfil, error: perfilError } =
       await usuarioDb
         .from("user_profiles")
@@ -265,7 +261,6 @@ app.get("/api/productos", verificarSesion, async (req, res) => {
 
 app.get("/api/compras", verificarSesion, async (req, res) => {
   try {
-    // Solo administrador y almacen pueden consultar compras.
     if (
       !["ADMINISTRADOR", "ALMACEN"].includes(req.perfil.rol)
     ) {
@@ -303,6 +298,115 @@ app.get("/api/compras", verificarSesion, async (req, res) => {
 
     return res.status(500).json({
       error: "Error interno del servidor"
+    });
+  }
+});
+
+// ========================================
+// REGISTRAR COMPRA COMO BORRADOR
+// ========================================
+
+app.post("/api/compras", verificarSesion, async (req, res) => {
+  try {
+    // Verificar permisos del usuario
+    if (
+      !["ADMINISTRADOR", "ALMACEN"].includes(req.perfil.rol)
+    ) {
+      return res.status(403).json({
+        error: "No tienes permisos para registrar compras"
+      });
+    }
+
+    const {
+      id_proveedor,
+      productos,
+      observaciones
+    } = req.body || {};
+
+    // Validar proveedor
+    if (
+      !Number.isSafeInteger(id_proveedor) ||
+      id_proveedor <= 0
+    ) {
+      return res.status(400).json({
+        error: "Selecciona un proveedor válido"
+      });
+    }
+
+    // Validar que existan productos
+    if (
+      !Array.isArray(productos) ||
+      productos.length === 0
+    ) {
+      return res.status(400).json({
+        error: "Debes agregar al menos un producto"
+      });
+    }
+
+    // Validar cada producto
+    for (const producto of productos) {
+      if (
+        !producto ||
+        !Number.isSafeInteger(producto.id_producto) ||
+        producto.id_producto <= 0 ||
+        !Number.isSafeInteger(producto.cantidad) ||
+        producto.cantidad <= 0 ||
+        typeof producto.precio_unitario !== "number" ||
+        !Number.isFinite(producto.precio_unitario) ||
+        producto.precio_unitario < 0
+      ) {
+        return res.status(400).json({
+          error: "Hay productos con datos incorrectos"
+        });
+      }
+    }
+
+    if (
+      observaciones != null &&
+      typeof observaciones !== "string"
+    ) {
+      return res.status(400).json({
+        error: "Las observaciones deben ser texto"
+      });
+    }
+
+    // Llamar a la funcion registrar_compra
+    // que ya existe en Supabase.
+    const { data, error } =
+      await req.supabaseUsuario.rpc(
+        "registrar_compra",
+        {
+          p_id_proveedor: id_proveedor,
+          p_productos: productos,
+          p_observaciones: observaciones || null
+        }
+      );
+
+    if (error) {
+      console.error(
+        "Error al registrar compra:",
+        error.message
+      );
+
+      return res.status(400).json({
+        error: "No se pudo registrar la compra. Verifica los datos y permisos."
+      });
+    }
+
+    return res.status(201).json({
+      mensaje: "Compra guardada como borrador",
+      id_compra: data,
+      estado: "BORRADOR"
+    });
+
+  } catch (error) {
+    console.error(
+      "Error interno al registrar compra:",
+      error.message
+    );
+
+    return res.status(500).json({
+      error: "Error interno al registrar la compra"
     });
   }
 });

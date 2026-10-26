@@ -260,6 +260,54 @@ app.get("/api/productos", verificarSesion, async (req, res) => {
 });
 
 // ========================================
+// CONSULTAR COMPRAS
+// ========================================
+
+app.get("/api/compras", verificarSesion, async (req, res) => {
+  try {
+    // Solo administrador y almacen pueden consultar compras.
+    if (
+      !["ADMINISTRADOR", "ALMACEN"].includes(req.perfil.rol)
+    ) {
+      return res.status(403).json({
+        error: "No tienes permisos para consultar compras"
+      });
+    }
+
+    const { data, error } =
+      await req.supabaseUsuario
+        .from("purchases")
+        .select(
+          "id_compra, id_proveedor, fecha_compra, total_compra, estado, observaciones"
+        )
+        .order("id_compra", { ascending: false });
+
+    if (error) {
+      console.error(
+        "Error al consultar compras:",
+        error.message
+      );
+
+      return res.status(500).json({
+        error: "No se pudieron consultar las compras"
+      });
+    }
+
+    return res.json(data);
+
+  } catch (error) {
+    console.error(
+      "Error interno al consultar compras:",
+      error.message
+    );
+
+    return res.status(500).json({
+      error: "Error interno del servidor"
+    });
+  }
+});
+
+// ========================================
 // RESPUESTA JSON PARA RUTAS API DESCONOCIDAS
 // ========================================
 

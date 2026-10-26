@@ -17,8 +17,30 @@ app.use(express.static(path.join(__dirname, "public")));
 const supabaseUrl = process.env.SUPABASE_URL;
 const supabaseKey = process.env.SUPABASE_PUBLISHABLE_KEY;
 
+// ========================================
+// DIAGNOSTICO DE VARIABLES EN VERCEL
+// ========================================
+
+// Solo muestra true o false.
+// No muestra el contenido de las claves.
+
+console.log("====================================");
+console.log("DIAGNOSTICO SUPABASE - DR. JIBA");
+
+console.log(
+  "SUPABASE_URL disponible:",
+  Boolean(supabaseUrl)
+);
+
+console.log(
+  "SUPABASE_PUBLISHABLE_KEY disponible:",
+  Boolean(supabaseKey)
+);
+
+console.log("====================================");
+
 if (!supabaseUrl || !supabaseKey) {
-  console.error("Faltan variables de entorno de Supabase");
+  console.error("ERROR DE CONFIGURACION DE SUPABASE");
   process.exit(1);
 }
 
@@ -230,6 +252,54 @@ app.get("/api/productos", verificarSesion, async (req, res) => {
 
   } catch (error) {
     console.error("Error:", error.message);
+
+    return res.status(500).json({
+      error: "Error interno del servidor"
+    });
+  }
+});
+
+// ========================================
+// CONSULTAR COMPRAS
+// ========================================
+
+app.get("/api/compras", verificarSesion, async (req, res) => {
+  try {
+    // Solo administrador y almacen pueden consultar compras.
+    if (
+      !["ADMINISTRADOR", "ALMACEN"].includes(req.perfil.rol)
+    ) {
+      return res.status(403).json({
+        error: "No tienes permisos para consultar compras"
+      });
+    }
+
+    const { data, error } =
+      await req.supabaseUsuario
+        .from("purchases")
+        .select(
+          "id_compra, id_proveedor, fecha_compra, total_compra, estado, observaciones"
+        )
+        .order("id_compra", { ascending: false });
+
+    if (error) {
+      console.error(
+        "Error al consultar compras:",
+        error.message
+      );
+
+      return res.status(500).json({
+        error: "No se pudieron consultar las compras"
+      });
+    }
+
+    return res.json(data);
+
+  } catch (error) {
+    console.error(
+      "Error interno al consultar compras:",
+      error.message
+    );
 
     return res.status(500).json({
       error: "Error interno del servidor"

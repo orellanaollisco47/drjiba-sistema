@@ -901,6 +901,551 @@ body:has(#seccionLogin:not([hidden])) footer {margin-left:0;background:transpare
       contenido.style.display = "none";
     }
 
+    
+    // ========================================
+    // MODULO DE VENTAS - DR. JIBA
+    // ========================================
+
+    async function mostrarVentas(vista) {
+      const descripcion = document.getElementById("descripcion");
+      const contenido = document.getElementById("contenido");
+
+      descripcion.textContent =
+        "Registra ventas, consulta el historial y confirma salidas de inventario.";
+
+      contenido.style.display = "block";
+      contenido.innerHTML =
+        '<p class="mensaje">Cargando clientes, productos y ventas...</p>';
+
+      let productos, clientes, ventas;
+
+      try {
+        [productos, clientes, ventas] = await Promise.all([
+          obtenerProductos(),
+          peticionProtegida("/api/clientes"),
+          peticionProtegida("/api/ventas")
+        ]);
+      } catch (error) {
+        if (vista !== vistaActual) return;
+        contenido.textContent =
+          "No se pudieron cargar las ventas: " + error.message;
+        return;
+      }
+
+      if (vista !== vistaActual) return;
+
+      contenido.innerHTML = `
+        <div class="compras-aviso">
+          Guardar una venta en BORRADOR no modifica el stock.
+          Confirmarla descontará las unidades y registrará
+          una SALIDA en el inventario.
+        </div>
+
+        <h3>Nueva venta</h3>
+
+        <div class="compras-formulario">
+          <div class="compras-campo">
+            <label for="ventaCliente">Cliente</label>
+            <select id="ventaCliente"></select>
+          </div>
+
+          <div class="compras-campo">
+            <label for="ventaObservaciones">Observaciones</label>
+            <input id="ventaObservaciones" type="text"
+              maxlength="500" placeholder="Opcional">
+          </div>
+
+          <div class="compras-campo">
+            <label for="ventaProducto">Producto</label>
+            <select id="ventaProducto"></select>
+          </div>
+
+          <div class="compras-campo">
+            <label for="ventaCantidad">Cantidad</label>
+            <input id="ventaCantidad" type="number"
+              min="1" step="1" value="1">
+          </div>
+
+          <div class="compras-campo">
+            <label for="ventaPrecio">Precio de venta</label>
+            <input id="ventaPrecio" type="text" readonly>
+          </div>
+
+          <div class="compras-campo">
+            <label for="ventaStock">Stock disponible</label>
+            <input id="ventaStock" type="text" readonly>
+          </div>
+        </div>
+
+        <div class="compras-acciones">
+          <button type="button" id="agregarDetalleVenta">
+            Agregar producto
+          </button>
+          <button type="button" id="limpiarDetalleVenta">
+            Limpiar lista
+          </button>
+        </div>
+
+        <p id="mensajeVenta" aria-live="polite"></p>
+
+        <div class="tabla-contenedor">
+          <table>
+            <thead>
+              <tr>
+                <th>Producto</th>
+                <th>Cantidad</th>
+                <th>Precio</th>
+                <th>Subtotal</th>
+                <th>Acción</th>
+              </tr>
+            </thead>
+            <tbody id="detallesVenta"></tbody>
+          </table>
+        </div>
+
+        <p class="compras-total" id="totalVenta">
+          Total: Bs 0.00
+        </p>
+
+        <div class="compras-acciones">
+          <button type="button" id="guardarBorradorVenta">
+            Guardar borrador
+          </button>
+          <button type="button" id="confirmarVenta" disabled>
+            Confirmar venta
+          </button>
+        </div>
+
+        <p id="ventaPendiente" aria-live="polite"></p>
+
+        <h3>Historial de ventas</h3>
+        <div class="tabla-contenedor">
+          <table>
+            <thead>
+              <tr>
+                <th>N.º</th>
+                <th>Cliente</th>
+                <th>Fecha</th>
+                <th>Total</th>
+                <th>Estado</th>
+                <th>Acción</th>
+              </tr>
+            </thead>
+            <tbody id="historialVentas"></tbody>
+          </table>
+        </div>
+      `;
+
+      const clienteSelect = document.getElementById("ventaCliente");
+      const productoSelect = document.getElementById("ventaProducto");
+      const cantidadInput = document.getElementById("ventaCantidad");
+      const precioInput = document.getElementById("ventaPrecio");
+      const stockInput = document.getElementById("ventaStock");
+      const mensaje = document.getElementById("mensajeVenta");
+      const cuerpo = document.getElementById("detallesVenta");
+      const guardar = document.getElementById("guardarBorradorVenta");
+      const confirmar = document.getElementById("confirmarVenta");
+      const pendiente = document.getElementById("ventaPendiente");
+      const historial = document.getElementById("historialVentas");
+
+      const detalles = [];
+      let idVentaGuardada = null;
+      let trabajando = false;
+
+      clienteSelect.add(new Option("Selecciona un cliente", ""));
+
+      clientes.forEach(cliente => {
+        clienteSelect.add(
+          new Option(cliente.nombre, String(cliente.id_cliente))
+        );
+      });
+
+      productoSelect.add(new Option("Selecciona un producto", ""));
+
+      productos.forEach(producto => {
+        productoSelect.add(
+          new Option(producto.nombre, String(producto.id_producto))
+        );
+      });
+
+      function actualizarProducto() {
+        const producto = productos.find(
+          p => String(p.id_producto) === productoSelect.value
+        );
+
+        precioInput.value = producto
+          ? formatoBs(producto.precio_venta)
+          : "";
+
+        stockInput.value = producto
+          ? String(producto.stock_actual)
+          : "";
+      }
+
+      productoSelect.addEventListener("change", actualizarProducto);
+      actualizarProducto();
+
+      function actualizarBotones() {
+        guardar.disabled =
+          trabajando ||
+          idVentaGuardada !== null ||
+          !clientes.length ||
+          !productos.length;
+
+        confirmar.disabled =
+          trabajando || idVentaGuardada === null;
+
+        pendiente.textContent = idVentaGuardada === null
+          ? "No hay una venta pendiente seleccionada."
+          : "Venta N.º " + idVentaGuardada +
+            " pendiente de confirmación.";
+      }
+
+      function dibujarDetalles() {
+        cuerpo.replaceChildren();
+
+        if (!detalles.length) {
+          const fila = cuerpo.insertRow();
+          const celda = fila.insertCell();
+          celda.colSpan = 5;
+          celda.textContent = "Todavía no agregaste productos.";
+        }
+
+        detalles.forEach((item, indice) => {
+          const fila = cuerpo.insertRow();
+
+          [
+            item.nombre,
+            item.cantidad,
+            formatoBs(item.precio),
+            formatoBs(item.cantidad * item.precio)
+          ].forEach(valor => {
+            fila.insertCell().textContent = valor;
+          });
+
+          const boton = document.createElement("button");
+          boton.type = "button";
+          boton.textContent = "Quitar";
+          boton.disabled = trabajando || idVentaGuardada !== null;
+
+          boton.addEventListener("click", () => {
+            detalles.splice(indice, 1);
+            dibujarDetalles();
+          });
+
+          fila.insertCell().appendChild(boton);
+        });
+
+        const total = detalles.reduce(
+          (suma, item) => suma + item.cantidad * item.precio,
+          0
+        );
+
+        document.getElementById("totalVenta").textContent =
+          "Total estimado: " + formatoBs(total);
+      }
+
+      function dibujarHistorial() {
+        historial.replaceChildren();
+
+        if (!ventas.length) {
+          const celda = historial.insertRow().insertCell();
+          celda.colSpan = 6;
+          celda.textContent = "No hay ventas registradas.";
+          return;
+        }
+
+        ventas.forEach(venta => {
+          const fila = historial.insertRow();
+
+          const cliente = clientes.find(
+            c => String(c.id_cliente) === String(venta.id_cliente)
+          );
+
+          const fecha = venta.fecha_venta
+            ? new Date(venta.fecha_venta).toLocaleString("es-BO")
+            : "Sin fecha";
+
+          [
+            venta.id_venta,
+            cliente ? cliente.nombre : "Cliente no disponible",
+            fecha,
+            formatoBs(venta.total_venta),
+            venta.estado
+          ].forEach(valor => {
+            fila.insertCell().textContent = valor;
+          });
+
+          const celdaAccion = fila.insertCell();
+
+          if (venta.estado === "BORRADOR") {
+            const boton = document.createElement("button");
+            boton.type = "button";
+            boton.textContent = "Seleccionar";
+            boton.disabled = trabajando;
+
+            boton.addEventListener("click", () => {
+              if (trabajando) return;
+
+              if (
+                idVentaGuardada !== null &&
+                idVentaGuardada !== Number(venta.id_venta)
+              ) {
+                mensaje.textContent =
+                  "Primero confirma o revisa la venta pendiente.";
+                return;
+              }
+
+              idVentaGuardada = Number(venta.id_venta);
+              mensaje.textContent =
+                "Seleccionaste la venta N.º " + idVentaGuardada +
+                ". Revisa sus datos antes de confirmar.";
+
+              actualizarBotones();
+            });
+
+            celdaAccion.appendChild(boton);
+          } else {
+            celdaAccion.textContent = "—";
+          }
+        });
+      }
+
+      document.getElementById("agregarDetalleVenta")
+        .addEventListener("click", () => {
+          if (trabajando || idVentaGuardada !== null) return;
+
+          const producto = productos.find(
+            p => String(p.id_producto) === productoSelect.value
+          );
+
+          const cantidad = Number(cantidadInput.value);
+
+          if (
+            !producto ||
+            !Number.isSafeInteger(cantidad) ||
+            cantidad <= 0
+          ) {
+            mensaje.textContent =
+              "Selecciona un producto y una cantidad válida.";
+            return;
+          }
+
+          if (detalles.some(
+            d => d.id_producto === producto.id_producto
+          )) {
+            mensaje.textContent =
+              "Ese producto ya está agregado.";
+            return;
+          }
+
+          if (cantidad > Number(producto.stock_actual)) {
+            mensaje.textContent =
+              "Stock insuficiente para ese producto.";
+            return;
+          }
+
+          const precio = Number(producto.precio_venta);
+
+          if (!Number.isFinite(precio) || precio < 0) {
+            mensaje.textContent = "Precio de producto inválido.";
+            return;
+          }
+
+          detalles.push({
+            id_producto: producto.id_producto,
+            nombre: producto.nombre,
+            cantidad,
+            precio
+          });
+
+          mensaje.textContent = "Producto agregado.";
+          dibujarDetalles();
+        });
+
+      document.getElementById("limpiarDetalleVenta")
+        .addEventListener("click", () => {
+          if (trabajando || idVentaGuardada !== null) return;
+          detalles.length = 0;
+          dibujarDetalles();
+          mensaje.textContent = "Lista vaciada.";
+        });
+
+      async function enviarVenta(ruta, datos) {
+        const respuesta = await fetch(API + ruta, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: "Bearer " + tokenAcceso
+          },
+          body: datos ? JSON.stringify(datos) : undefined
+        });
+
+        const resultado = await respuesta.json().catch(() => ({}));
+
+        if (respuesta.status === 401) {
+          verLogin();
+          throw new Error("La sesión ha expirado.");
+        }
+
+        if (!respuesta.ok) {
+          throw new Error(resultado.error || "Error en la operación.");
+        }
+
+        return resultado;
+      }
+
+      guardar.addEventListener("click", async () => {
+        if (trabajando || idVentaGuardada !== null) return;
+
+        const idCliente = Number(clienteSelect.value);
+
+        if (!Number.isSafeInteger(idCliente) || idCliente <= 0) {
+          mensaje.textContent = "Selecciona un cliente.";
+          return;
+        }
+
+        if (!detalles.length) {
+          mensaje.textContent = "Agrega al menos un producto.";
+          return;
+        }
+
+        trabajando = true;
+        guardar.textContent = "Guardando...";
+        actualizarBotones();
+
+        try {
+          const resultado = await enviarVenta("/api/ventas", {
+            id_cliente: idCliente,
+            observaciones:
+              document.getElementById("ventaObservaciones").value.trim(),
+            productos: detalles.map(d => ({
+              id_producto: d.id_producto,
+              cantidad: d.cantidad
+            }))
+          });
+
+          if (vista !== vistaActual) return;
+
+          const id = Number(resultado.id_venta);
+
+          if (!Number.isSafeInteger(id) || id <= 0) {
+            throw new Error(
+              "La venta se guardó, pero no se recibió un ID válido. " +
+              "Consulta el historial antes de volver a guardar."
+            );
+          }
+
+          idVentaGuardada = id;
+          detalles.length = 0;
+          dibujarDetalles();
+
+          mensaje.textContent =
+            "Venta N.º " + id + " guardada como BORRADOR.";
+
+          await recargarHistorial();
+
+        } catch (error) {
+          if (vista === vistaActual) {
+            mensaje.textContent = "Error: " + error.message;
+          }
+        } finally {
+          trabajando = false;
+          if (vista === vistaActual) {
+            guardar.textContent = "Guardar borrador";
+            actualizarBotones();
+            dibujarDetalles();
+          }
+        }
+      });
+
+      async function recargarHistorial() {
+        try {
+          const nuevosDatos = await peticionProtegida("/api/ventas");
+
+          if (vista !== vistaActual) return;
+
+          ventas = nuevosDatos;
+          dibujarHistorial();
+        } catch (error) {
+          if (vista === vistaActual) {
+            mensaje.textContent +=
+              " No se pudo actualizar el historial.";
+          }
+        }
+      }
+
+      confirmar.addEventListener("click", async () => {
+        if (trabajando || idVentaGuardada === null) return;
+
+        const id = idVentaGuardada;
+
+        const aceptado = window.confirm(
+          "¿Confirmar la venta N.º " + id + "?\n\n" +
+          "Se descontará el stock y se registrará " +
+          "una salida de inventario. Esta acción no se puede repetir."
+        );
+
+        if (!aceptado) return;
+
+        trabajando = true;
+        confirmar.textContent = "Confirmando...";
+        actualizarBotones();
+
+        try {
+          await enviarVenta(
+            "/api/ventas/" + encodeURIComponent(id) + "/confirmar"
+          );
+
+          if (vista !== vistaActual) return;
+
+          idVentaGuardada = null;
+
+          mensaje.textContent =
+            "Venta N.º " + id +
+            " confirmada correctamente. Inventario actualizado.";
+
+          await recargarHistorial();
+
+          // Actualizar stock visible para futuras ventas.
+          productos = await obtenerProductos();
+
+          if (vista !== vistaActual) return;
+
+          productoSelect.replaceChildren();
+          productoSelect.add(
+            new Option("Selecciona un producto", "")
+          );
+
+          productos.forEach(p => {
+            productoSelect.add(
+              new Option(p.nombre, String(p.id_producto))
+            );
+          });
+
+          actualizarProducto();
+
+        } catch (error) {
+          if (vista === vistaActual) {
+            mensaje.textContent =
+              "Error: " + error.message +
+              " Revisa el historial antes de volver a confirmar.";
+          }
+        } finally {
+          trabajando = false;
+
+          if (vista === vistaActual) {
+            confirmar.textContent = "Confirmar venta";
+            actualizarBotones();
+          }
+        }
+      });
+
+      dibujarDetalles();
+      dibujarHistorial();
+      actualizarBotones();
+    }
+
 
     // ========================================
     // MODULO DE COMPRAS

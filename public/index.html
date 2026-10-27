@@ -326,6 +326,137 @@
     }
 
     [hidden] { display: none !important; }
+  
+/* ==========================================================
+   DR. JIBA | Diseño Dashboard Azul Marino
+   Capa visual: conserva IDs, funciones, endpoints y visor 3D.
+   ========================================================== */
+:root {
+  --navy:#0b1933; --navy2:#12284b; --blue:#2563eb;
+  --cyan:#38bdf8; --ink:#14233d; --muted:#687891;
+  --surface:#ffffff; --line:#e5ebf4; --page:#f3f6fb;
+}
+html { scroll-behavior:smooth; }
+body { background:var(--page); color:var(--ink); font-family:Inter,"Segoe UI",Arial,sans-serif; min-height:100vh; }
+header {
+  position:fixed; top:0; left:0; z-index:50; width:248px; height:104px;
+  background:var(--navy); text-align:left; padding:27px 23px 15px;
+  border-bottom:1px solid #ffffff1a;
+}
+header h1 {font-size:26px; font-weight:850; letter-spacing:.8px; margin:0 0 7px;}
+header h1::before {content:"◈"; color:var(--cyan); margin-right:10px;}
+header p {font-size:11px; line-height:1.5; color:#9db4d6; margin:0; letter-spacing:.15px;}
+nav#menu {
+  position:fixed; left:0; top:104px; bottom:0; width:248px; z-index:49;
+  display:flex; flex-direction:column; align-items:stretch; justify-content:flex-start;
+  flex-wrap:nowrap; gap:7px; background:var(--navy); padding:25px 14px;
+  box-shadow:8px 0 25px #0b193310; overflow-y:auto;
+}
+nav#menu::before {content:"NAVEGACIÓN"; color:#7690b4; font-size:10px; letter-spacing:2px; padding:0 15px 10px; font-weight:800;}
+nav#menu button {
+  display:flex; align-items:center; text-align:left; width:100%;
+  border-radius:11px; padding:15px 16px; background:transparent;
+  color:#b8c9e4; font-size:14px; font-weight:650;
+  transition:background .2s, color .2s, transform .2s;
+}
+nav#menu button:nth-of-type(1)::before {content:"⌂";}
+nav#menu button:nth-of-type(2)::before {content:"▦";}
+nav#menu button:nth-of-type(3)::before {content:"↧";}
+nav#menu button:nth-of-type(4)::before {content:"↗";}
+nav#menu button:nth-of-type(5)::before {content:"▤";}
+nav#menu button::before {font-size:20px; margin-right:15px; min-width:24px; text-align:center; color:#78bdf7;}
+nav#menu button:hover {background:#ffffff13; color:white; transform:translateX(3px);}
+nav#menu button.activo {background:linear-gradient(100deg,#2563eb,#1b4fb0); color:white; box-shadow:0 8px 20px #020b2480;}
+nav#menu button.activo::before {color:white;}
+main {max-width:none; margin:0 0 0 248px; padding:35px clamp(22px,3.5vw,56px) 60px; min-height:calc(100vh - 65px);}
+body:has(#seccionLogin:not([hidden])) main {margin-left:0; display:grid; place-items:center; min-height:100vh;}
+body:has(#seccionLogin:not([hidden])) header {position:absolute; width:100%; height:auto; background:transparent; text-align:center; padding:36px;}
+body:has(#seccionLogin:not([hidden])) header h1 {color:var(--navy);}
+body:has(#seccionLogin:not([hidden])) header p {color:var(--muted);}
+body:has(#seccionLogin:not([hidden])) {background:radial-gradient(circle at 80% 15%,#d8e9ff 0%,transparent 38%),var(--page);}
+#seccionSistema {max-width:1500px; margin:auto;}
+.usuario {
+  background:white; border:1px solid var(--line); border-radius:14px;
+  box-shadow:0 5px 24px #12284b08; padding:15px 20px; margin-bottom:24px;
+}
+#datosUsuario {font-size:13px; font-weight:700; color:var(--navy2);}
+.usuario button {background:#eef4ff; color:var(--blue); font-weight:750; border-radius:9px;}
+.usuario button:hover {background:#dce9ff;}
+.panel {border:1px solid var(--line); border-radius:18px; box-shadow:0 10px 38px #152c5210; padding:clamp(20px,2.5vw,36px);}
+.panel > h2 {font-size:clamp(24px,2.4vw,34px); margin:0 0 10px; color:var(--navy); letter-spacing:-.7px;}
+#descripcion {font-size:14px; color:var(--muted); line-height:1.7; margin:0 0 24px;}
+.cards {gap:18px;}
+.card {
+  background:linear-gradient(145deg,#fff,#f8fbff); border:1px solid var(--line);
+  border-left:0; border-radius:15px; padding:24px;
+  box-shadow:0 7px 25px #152c5209; transition:transform .2s,box-shadow .2s;
+}
+.card:hover {transform:translateY(-4px); box-shadow:0 13px 30px #152c521c;}
+.card::before {content:""; display:block; width:36px; height:5px; border-radius:6px; background:linear-gradient(90deg,var(--blue),var(--cyan)); margin-bottom:17px;}
+.card h3 {font-size:13px; font-weight:700; color:var(--muted);}
+.card p,.resumen .card p {font-size:clamp(24px,2.4vw,32px); color:var(--navy); letter-spacing:-.6px;}
+.tabla-contenedor {border:1px solid var(--line); border-radius:13px; overflow-x:auto; background:white;}
+table {border-collapse:separate; border-spacing:0;}
+th {background:#f0f5fc; color:#4c607f; font-size:12px; text-transform:uppercase; letter-spacing:.5px; padding:16px;}
+td {font-size:13px; padding:15px; border-color:var(--line);}
+tr:nth-child(even) {background:#f9fbff;}
+tbody tr:hover {background:#eff6ff;}
+#tablaProductos tbody tr[data-id]:hover,#tablaProductos tbody tr[data-id]:focus {background:#eaf3ff;}
+#tablaProductos tbody tr.seleccionado {background:#e7f1ff;box-shadow:inset 4px 0 0 var(--blue);}
+.etiqueta-disponible {background:#dcfce7;color:#157347;}
+.etiqueta-bajo {background:#fff3cf;color:#995c00;}
+.etiqueta-agotado {background:#fee2e2;color:#b91c1c;}
+.productos-layout {grid-template-columns:minmax(0,1.45fr) minmax(320px,1fr);gap:24px;}
+.productos-herramientas {margin:0 0 16px;}
+.productos-herramientas input,.productos-herramientas select,
+.compras-campo input,.compras-campo select,.login input {
+  border:1px solid #d9e3f1; border-radius:10px; padding:13px 14px;
+  background:#fff; color:var(--ink); outline:none;
+}
+.productos-herramientas input:focus,.productos-herramientas select:focus,
+.compras-campo input:focus,.compras-campo select:focus,.login input:focus {
+  border-color:#60a5fa; box-shadow:0 0 0 3px #60a5fa25;
+}
+.visor3d-panel {
+  background:linear-gradient(160deg,#e8f3ff,#f7fbff 65%,#e6f0ff);
+  border:1px solid #c8defa; border-radius:17px; padding:19px;
+  box-shadow:0 12px 30px #1e4a8a12; top:20px;
+}
+.visor3d-panel h3 {color:var(--navy);font-size:19px;}
+.visor3d {height:370px; background:radial-gradient(circle at 50% 35%,#ffffff,#d9ebff);border:1px solid #d6e7fa;}
+.visor3d canvas:focus-visible {outline:3px solid var(--blue);}
+.visor3d-ayuda {color:#617b9d;}
+.compras-aviso {background:#eff6ff;border-left:4px solid var(--blue);color:#35547e;}
+.compras-acciones button {background:var(--blue);border-radius:10px;box-shadow:0 5px 14px #2563eb24;}
+.compras-acciones button:hover:not(:disabled) {background:#1d4ed8;}
+.compras-total {color:var(--navy);}
+.mensaje {background:#eff6ff;color:#2e5181;}
+.login {width:min(440px,100%); margin:80px auto 20px; padding:38px;}
+.login h2 {color:var(--navy);font-size:27px;}
+.login button {background:var(--blue);border-radius:10px;}
+footer {margin-left:248px;background:var(--navy);color:#a4b7d3;font-size:12px;padding:18px;}
+body:has(#seccionLogin:not([hidden])) footer {margin-left:0;background:transparent;color:var(--muted);}
+@media(max-width:1050px) {.productos-layout{grid-template-columns:1fr}.visor3d-panel{position:static;order:0;}.visor3d{height:340px;}}
+@media(max-width:760px) {
+ header {position:relative;width:100%;height:auto;padding:17px 20px;}
+ header h1 {font-size:23px;} header p{font-size:11px;}
+ nav#menu {position:sticky;top:0;bottom:auto;width:100%;height:auto;flex-direction:row;gap:5px;padding:10px;overflow-x:auto;box-shadow:0 6px 18px #0b193322;}
+ nav#menu::before{display:none;}
+ nav#menu button {min-width:max-content;width:auto;padding:11px 13px;font-size:12px;}
+ nav#menu button::before{font-size:15px;margin-right:6px;min-width:0;}
+ main {margin:0;padding:20px 13px 40px;}
+ .panel{padding:18px;}
+ .usuario{padding:13px;}
+ footer{margin-left:0;}
+ .cards{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;}
+ .card{padding:14px;}
+ .card p,.resumen .card p{font-size:21px;}
+ .productos-layout{grid-template-columns:1fr;}
+ .visor3d{height:280px;}
+ body:has(#seccionLogin:not([hidden])) header {position:absolute;}
+}
+@media(prefers-reduced-motion:reduce) {*,*::before,*::after{animation-duration:.01ms!important;transition-duration:.01ms!important;}}
+
   </style>
 </head>
 
@@ -584,6 +715,14 @@
 
       vistaActual++;
       destruirVisor3D();
+
+      // Resaltar el módulo actual en el menú lateral.
+      document.querySelectorAll("#menu button").forEach(boton => {
+        const activo = boton.textContent.trim() === modulo;
+        boton.classList.toggle("activo", activo);
+        if (activo) boton.setAttribute("aria-current", "page");
+        else boton.removeAttribute("aria-current");
+      });
 
       const titulo = document.getElementById("titulo");
       const descripcion = document.getElementById("descripcion");

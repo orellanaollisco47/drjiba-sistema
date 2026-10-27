@@ -457,6 +457,22 @@ body:has(#seccionLogin:not([hidden])) footer {margin-left:0;background:transpare
 }
 @media(prefers-reduced-motion:reduce) {*,*::before,*::after{animation-duration:.01ms!important;transition-duration:.01ms!important;}}
 
+
+    /* Ventas: hereda la apariencia azul marino del dashboard */
+    .ventas-seccion { margin-top: 24px; }
+    .ventas-seccion h3 { color: var(--navy); margin-bottom: 12px; }
+    .ventas-formulario { display:grid; grid-template-columns:repeat(auto-fit,minmax(210px,1fr)); gap:14px; margin:18px 0; }
+    .ventas-campo label { display:block; font-weight:700; margin-bottom:7px; color:var(--ink); }
+    .ventas-campo input,.ventas-campo select { width:100%; padding:12px; border:1px solid #d9e3f1; border-radius:10px; background:#fff; color:var(--ink); }
+    .ventas-campo input:focus,.ventas-campo select:focus { outline:2px solid #93c5fd; }
+    .ventas-acciones { display:flex; flex-wrap:wrap; gap:10px; margin:15px 0; }
+    .ventas-acciones button,.ventas-quitar,.ventas-historial button { border:0; border-radius:10px; padding:11px 15px; background:var(--blue); color:white; font-weight:700; cursor:pointer; }
+    .ventas-acciones button:disabled,.ventas-quitar:disabled,.ventas-historial button:disabled { opacity:.55; cursor:not-allowed; }
+    .ventas-quitar { padding:7px 11px; background:#475569; }
+    .ventas-total { font-size:23px; font-weight:800; color:var(--navy); text-align:right; }
+    .ventas-estado { padding:12px; background:#eff6ff; border-left:4px solid var(--blue); border-radius:8px; margin:12px 0; }
+    .ventas-historial button { padding:7px 11px; font-size:12px; }
+
   </style>
 </head>
 
@@ -1152,6 +1168,313 @@ body:has(#seccionLogin:not([hidden])) footer {margin-left:0;background:transpare
           }
         }
       });
+    }
+
+
+    // ========================================
+    // MODULO DE VENTAS
+    // ========================================
+    async function mostrarVentas(vista) {
+      const descripcion = document.getElementById("descripcion");
+      const contenido = document.getElementById("contenido");
+      descripcion.textContent = "Registra ventas en borrador, confirma la salida de productos y consulta el historial.";
+      contenido.style.display = "block";
+      contenido.innerHTML = '<p class="mensaje">Cargando productos, clientes y ventas...</p>';
+
+      let productos, clientes, ventas;
+      try {
+        [productos, clientes, ventas] = await Promise.all([
+          obtenerProductos(),
+          peticionProtegida("/api/clientes"),
+          peticionProtegida("/api/ventas")
+        ]);
+      } catch (error) {
+        if (vista !== vistaActual) return;
+        contenido.textContent = "No se pudo abrir Ventas: " + error.message;
+        return;
+      }
+      if (vista !== vistaActual) return;
+
+      contenido.innerHTML = `
+        <div class="ventas-estado">Guardar un borrador no descuenta existencias. Al confirmar, Supabase valida el stock y registra la salida en el inventario.</div>
+        <section class="ventas-seccion">
+          <h3>Nueva venta</h3>
+          <div class="ventas-formulario">
+            <div class="ventas-campo"><label for="ventaCliente">Cliente</label><select id="ventaCliente"></select></div>
+            <div class="ventas-campo"><label for="ventaObservaciones">Observaciones (opcional)</label><input id="ventaObservaciones" type="text" maxlength="1000" placeholder="Observaciones de la venta"></div>
+            <div class="ventas-campo"><label for="ventaProducto">Producto</label><select id="ventaProducto"></select></div>
+            <div class="ventas-campo"><label for="ventaCantidad">Cantidad</label><input id="ventaCantidad" type="number" min="1" step="1" value="1"></div>
+          </div>
+          <p id="ventaDisponibilidad" class="productos-contador"></p>
+          <div class="ventas-acciones">
+            <button type="button" id="ventaAgregar">Agregar producto</button>
+            <button type="button" id="ventaLimpiar">Limpiar lista</button>
+          </div>
+          <p id="ventaMensaje" aria-live="polite"></p>
+          <div class="tabla-contenedor"><table>
+            <thead><tr><th>Producto</th><th>Cantidad</th><th>Precio de venta</th><th>Subtotal</th><th>Acción</th></tr></thead>
+            <tbody id="ventaDetalles"></tbody>
+          </table></div>
+          <p class="ventas-total" id="ventaTotal">Total: Bs 0.00</p>
+          <div class="ventas-acciones">
+            <button type="button" id="ventaGuardar">Guardar borrador</button>
+            <button type="button" id="ventaConfirmar" disabled>Confirmar venta</button>
+          </div>
+          <p id="ventaPendiente" aria-live="polite">No hay una venta seleccionada para confirmar.</p>
+        </section>
+        <section class="ventas-seccion ventas-historial">
+          <h3>Historial de ventas</h3>
+          <p class="productos-contador">También puedes confirmar un borrador guardado anteriormente.</p>
+          <div class="tabla-contenedor"><table>
+            <thead><tr><th>N.º</th><th>Fecha</th><th>Cliente</th><th>Total</th><th>Estado</th><th>Acción</th></tr></thead>
+            <tbody id="ventaHistorial"></tbody>
+          </table></div>
+        </section>`;
+
+      const $ = id => document.getElementById(id);
+      const selector = $("ventaProducto");
+      const clienteSelect = $("ventaCliente");
+      const cantidad = $("ventaCantidad");
+      const mensaje = $("ventaMensaje");
+      const cuerpo = $("ventaDetalles");
+      const guardar = $("ventaGuardar");
+      const confirmar = $("ventaConfirmar");
+      const detalles = [];
+      let idVentaGuardada = null;
+      let ocupado = false;
+      const clientePorId = new Map(clientes.map(c => [String(c.id_cliente), c.nombre]));
+
+      clienteSelect.add(new Option("Selecciona un cliente", ""));
+      clientes.forEach(c => clienteSelect.add(new Option(c.nombre, String(c.id_cliente))));
+      selector.add(new Option("Selecciona un producto", ""));
+      productos.forEach(p => selector.add(new Option(p.nombre, String(p.id_producto))));
+
+      function actualizarDisponibilidad() {
+        const p = productos.find(item => String(item.id_producto) === selector.value);
+        $("ventaDisponibilidad").textContent = p
+          ? "Precio: " + formatoBs(p.precio_venta) + " · Stock disponible: " + p.stock_actual
+          : "Selecciona un producto para ver su precio y stock.";
+      }
+      selector.addEventListener("change", actualizarDisponibilidad);
+      actualizarDisponibilidad();
+
+      function actualizarBotones() {
+        guardar.disabled = ocupado || idVentaGuardada !== null || !productos.length || !clientes.length;
+        confirmar.disabled = ocupado || idVentaGuardada === null;
+        $("ventaAgregar").disabled = ocupado || idVentaGuardada !== null;
+        $("ventaLimpiar").disabled = ocupado || idVentaGuardada !== null;
+        clienteSelect.disabled = ocupado || idVentaGuardada !== null;
+        $("ventaObservaciones").disabled = ocupado || idVentaGuardada !== null;
+        $("ventaPendiente").textContent = idVentaGuardada === null
+          ? "No hay una venta seleccionada para confirmar."
+          : "Venta N.º " + idVentaGuardada + " en BORRADOR, pendiente de confirmación.";
+      }
+
+      function dibujarDetalles() {
+        cuerpo.replaceChildren();
+        if (!detalles.length) {
+          const td = cuerpo.insertRow().insertCell();
+          td.colSpan = 5;
+          td.textContent = "Todavía no agregaste productos.";
+        }
+        detalles.forEach((item, indice) => {
+          const fila = cuerpo.insertRow();
+          [item.nombre, item.cantidad, formatoBs(item.precio), formatoBs(item.cantidad * item.precio)]
+            .forEach(valor => { fila.insertCell().textContent = valor; });
+          const boton = document.createElement("button");
+          boton.type = "button";
+          boton.className = "ventas-quitar";
+          boton.textContent = "Quitar";
+          boton.disabled = ocupado || idVentaGuardada !== null;
+          boton.addEventListener("click", () => {
+            detalles.splice(indice, 1);
+            dibujarDetalles();
+          });
+          fila.insertCell().appendChild(boton);
+        });
+        const total = detalles.reduce((s, d) => s + d.cantidad * d.precio, 0);
+        $("ventaTotal").textContent = "Total estimado: " + formatoBs(total);
+      }
+
+      function dibujarHistorial() {
+        const tabla = $("ventaHistorial");
+        tabla.replaceChildren();
+        if (!ventas.length) {
+          const td = tabla.insertRow().insertCell();
+          td.colSpan = 6;
+          td.textContent = "Todavía no hay ventas registradas.";
+        }
+        ventas.forEach(v => {
+          const fila = tabla.insertRow();
+          const fecha = v.fecha_venta ? new Date(v.fecha_venta).toLocaleString("es-BO") : "—";
+          [v.id_venta, fecha, clientePorId.get(String(v.id_cliente)) || "Cliente no disponible", formatoBs(v.total_venta), v.estado]
+            .forEach(valor => { fila.insertCell().textContent = valor; });
+          const accion = fila.insertCell();
+          if (v.estado === "BORRADOR") {
+            const boton = document.createElement("button");
+            boton.type = "button";
+            boton.textContent = "Seleccionar";
+            boton.disabled = ocupado;
+            boton.addEventListener("click", () => {
+              if (ocupado) return;
+              idVentaGuardada = Number(v.id_venta);
+              detalles.length = 0;
+              dibujarDetalles();
+              actualizarBotones();
+              mensaje.textContent = "Seleccionaste la venta N.º " + idVentaGuardada + ". Revisa el historial antes de confirmar.";
+              window.scrollTo({ top: 0, behavior: "smooth" });
+            });
+            accion.appendChild(boton);
+          } else {
+            accion.textContent = "—";
+          }
+        });
+      }
+
+      $("ventaAgregar").addEventListener("click", () => {
+        if (ocupado || idVentaGuardada !== null) return;
+        const p = productos.find(item => String(item.id_producto) === selector.value);
+        const n = Number(cantidad.value);
+        if (!p || !Number.isSafeInteger(n) || n <= 0) {
+          mensaje.textContent = "Selecciona un producto y una cantidad entera positiva.";
+          return;
+        }
+        if (Number(p.stock_actual) < n) {
+          mensaje.textContent = "Stock insuficiente para " + p.nombre + ".";
+          return;
+        }
+        if (detalles.some(d => d.id_producto === p.id_producto)) {
+          mensaje.textContent = "El producto ya está agregado. Quítalo para cambiar la cantidad.";
+          return;
+        }
+        if (!Number.isFinite(Number(p.precio_venta)) || Number(p.precio_venta) < 0) {
+          mensaje.textContent = "Este producto no tiene un precio de venta válido.";
+          return;
+        }
+        detalles.push({ id_producto: p.id_producto, nombre: p.nombre, cantidad: n, precio: Number(p.precio_venta) });
+        mensaje.textContent = "Producto agregado.";
+        dibujarDetalles();
+      });
+
+      $("ventaLimpiar").addEventListener("click", () => {
+        if (ocupado || idVentaGuardada !== null) return;
+        detalles.length = 0;
+        mensaje.textContent = "Lista vaciada.";
+        dibujarDetalles();
+      });
+
+      guardar.addEventListener("click", async () => {
+        if (ocupado || idVentaGuardada !== null) return;
+        const idCliente = Number(clienteSelect.value);
+        if (!Number.isSafeInteger(idCliente) || idCliente <= 0) {
+          mensaje.textContent = "Selecciona un cliente.";
+          return;
+        }
+        if (!detalles.length) {
+          mensaje.textContent = "Agrega al menos un producto.";
+          return;
+        }
+        ocupado = true;
+        actualizarBotones();
+        guardar.textContent = "Guardando...";
+        mensaje.textContent = "Guardando borrador...";
+        try {
+          const respuesta = await fetch(API + "/api/ventas", {
+            method: "POST",
+            headers: { "Content-Type": "application/json", Authorization: "Bearer " + tokenAcceso },
+            body: JSON.stringify({
+              id_cliente: idCliente,
+              observaciones: $("ventaObservaciones").value.trim() || null,
+              productos: detalles.map(d => ({ id_producto: d.id_producto, cantidad: d.cantidad }))
+            })
+          });
+          const resultado = await respuesta.json().catch(() => ({}));
+          if (respuesta.status === 401) {
+            verLogin();
+            throw new Error("La sesión ha expirado.");
+          }
+          if (!respuesta.ok) throw new Error(resultado.error || "No se pudo guardar la venta.");
+          if (vista !== vistaActual) return;
+          const id = Number(resultado.id_venta);
+          if (!Number.isSafeInteger(id) || id <= 0) {
+            throw new Error("El servidor respondió sin número de venta. Consulta el historial antes de intentar guardar otra vez.");
+          }
+          idVentaGuardada = id;
+          ventas.unshift({
+            id_venta: id, id_cliente: idCliente, fecha_venta: new Date().toISOString(),
+            total_venta: detalles.reduce((s, d) => s + d.cantidad * d.precio, 0), estado: "BORRADOR"
+          });
+          mensaje.textContent = "Venta N.º " + id + " guardada como BORRADOR. El stock no se modificó.";
+          dibujarHistorial();
+        } catch (error) {
+          if (vista === vistaActual) mensaje.textContent = "Error: " + error.message;
+        } finally {
+          ocupado = false;
+          if (vista === vistaActual) {
+            guardar.textContent = "Guardar borrador";
+            actualizarBotones();
+            dibujarDetalles();
+          }
+        }
+      });
+
+      confirmar.addEventListener("click", async () => {
+        if (ocupado || idVentaGuardada === null) return;
+        const id = idVentaGuardada;
+        const aceptado = window.confirm(
+          "¿Confirmar la venta N.º " + id + "?\n\nSe descontará el stock y se registrará una SALIDA en inventario. Esta operación no se puede repetir."
+        );
+        if (!aceptado) return;
+        ocupado = true;
+        actualizarBotones();
+        confirmar.textContent = "Confirmando...";
+        mensaje.textContent = "Confirmando venta N.º " + id + "...";
+        try {
+          const respuesta = await fetch(API + "/api/ventas/" + encodeURIComponent(id) + "/confirmar", {
+            method: "POST", headers: { Authorization: "Bearer " + tokenAcceso }
+          });
+          const resultado = await respuesta.json().catch(() => ({}));
+          if (respuesta.status === 401) {
+            verLogin();
+            throw new Error("La sesión ha expirado.");
+          }
+          if (!respuesta.ok) throw new Error(resultado.error || "No se pudo confirmar la venta.");
+          if (vista !== vistaActual) return;
+          idVentaGuardada = null;
+          const venta = ventas.find(v => Number(v.id_venta) === id);
+          if (venta) venta.estado = "CONFIRMADA";
+          detalles.length = 0;
+          mensaje.textContent = "Venta N.º " + id + " confirmada. El inventario fue actualizado.";
+          dibujarHistorial();
+          dibujarDetalles();
+          // Actualizar stock mostrado en el selector para una venta posterior.
+          try {
+            productos = await obtenerProductos();
+            if (vista === vistaActual) {
+              selector.replaceChildren(new Option("Selecciona un producto", ""));
+              productos.forEach(p => selector.add(new Option(p.nombre, String(p.id_producto))));
+              actualizarDisponibilidad();
+            }
+          } catch (error) {
+            if (vista === vistaActual) mensaje.textContent += " Recarga Ventas para consultar el stock actualizado.";
+          }
+        } catch (error) {
+          if (vista === vistaActual) mensaje.textContent = "Error: " + error.message + " Si la conexión falló, revisa el historial antes de reintentar.";
+        } finally {
+          ocupado = false;
+          if (vista === vistaActual) {
+            confirmar.textContent = "Confirmar venta";
+            actualizarBotones();
+          }
+        }
+      });
+
+      dibujarDetalles();
+      dibujarHistorial();
+      actualizarBotones();
+      if (!clientes.length || !productos.length) {
+        mensaje.textContent = "Necesitas al menos un cliente activo y un producto para registrar ventas.";
+      }
     }
 
     // ========================================

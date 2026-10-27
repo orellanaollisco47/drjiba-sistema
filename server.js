@@ -17,23 +17,10 @@ app.use(express.static(path.join(__dirname, "public")));
 const supabaseUrl = process.env.SUPABASE_URL;
 const supabaseKey = process.env.SUPABASE_PUBLISHABLE_KEY;
 
-// ========================================
-// DIAGNOSTICO DE VARIABLES EN VERCEL
-// ========================================
-
 console.log("====================================");
 console.log("DIAGNOSTICO SUPABASE - DR. JIBA");
-
-console.log(
-  "SUPABASE_URL disponible:",
-  Boolean(supabaseUrl)
-);
-
-console.log(
-  "SUPABASE_PUBLISHABLE_KEY disponible:",
-  Boolean(supabaseKey)
-);
-
+console.log("SUPABASE_URL disponible:", Boolean(supabaseUrl));
+console.log("SUPABASE_PUBLISHABLE_KEY disponible:", Boolean(supabaseKey));
 console.log("====================================");
 
 if (!supabaseUrl || !supabaseKey) {
@@ -48,8 +35,9 @@ const supabase = createClient(supabaseUrl, supabaseKey, {
   }
 });
 
-// Crear cliente con el token del usuario.
-// Las consultas respetan las politicas RLS.
+// Cliente Supabase con el token del usuario.
+// Respeta las politicas RLS de la base de datos.
+
 function clienteUsuario(token) {
   return createClient(supabaseUrl, supabaseKey, {
     global: {
@@ -65,7 +53,7 @@ function clienteUsuario(token) {
 }
 
 // ========================================
-// VERIFICAR ESTADO DEL SERVIDOR
+// ESTADO DEL SERVIDOR
 // ========================================
 
 app.get("/api/estado", (req, res) => {
@@ -308,7 +296,6 @@ app.get("/api/compras", verificarSesion, async (req, res) => {
 
 app.post("/api/compras", verificarSesion, async (req, res) => {
   try {
-    // Verificar permisos del usuario
     if (
       !["ADMINISTRADOR", "ALMACEN"].includes(req.perfil.rol)
     ) {
@@ -323,7 +310,6 @@ app.post("/api/compras", verificarSesion, async (req, res) => {
       observaciones
     } = req.body || {};
 
-    // Validar proveedor
     if (
       !Number.isSafeInteger(id_proveedor) ||
       id_proveedor <= 0
@@ -333,7 +319,6 @@ app.post("/api/compras", verificarSesion, async (req, res) => {
       });
     }
 
-    // Validar que existan productos
     if (
       !Array.isArray(productos) ||
       productos.length === 0
@@ -343,7 +328,6 @@ app.post("/api/compras", verificarSesion, async (req, res) => {
       });
     }
 
-    // Validar cada producto
     for (const producto of productos) {
       if (
         !producto ||
@@ -370,8 +354,6 @@ app.post("/api/compras", verificarSesion, async (req, res) => {
       });
     }
 
-    // Llamar a la funcion registrar_compra
-    // que ya existe en Supabase.
     const { data, error } =
       await req.supabaseUsuario.rpc(
         "registrar_compra",
@@ -410,20 +392,19 @@ app.post("/api/compras", verificarSesion, async (req, res) => {
     });
   }
 });
+
 // ========================================
 // CONFIRMAR COMPRA Y ACTUALIZAR INVENTARIO
 // ========================================
 
 app.post("/api/compras/:id/confirmar", verificarSesion, async (req, res) => {
   try {
-    // Verificar permisos
     if (!["ADMINISTRADOR", "ALMACEN"].includes(req.perfil.rol)) {
       return res.status(403).json({
         error: "No tienes permisos para confirmar compras"
       });
     }
 
-    // Validar identificador de compra
     const idCompra = Number(req.params.id);
 
     if (!Number.isSafeInteger(idCompra) || idCompra <= 0) {
@@ -432,7 +413,6 @@ app.post("/api/compras/:id/confirmar", verificarSesion, async (req, res) => {
       });
     }
 
-    // Confirmar mediante la función autorizada de Supabase
     const { error } = await req.supabaseUsuario.rpc(
       "confirmar_compra_autorizada",
       {
@@ -462,9 +442,10 @@ app.post("/api/compras/:id/confirmar", verificarSesion, async (req, res) => {
     });
   }
 });
- // ========================================
- // CONSULTAR PROVEEDORES ACTIVOS
- // ========================================
+
+// ========================================
+// CONSULTAR PROVEEDORES ACTIVOS
+// ========================================
 
 app.get("/api/proveedores", verificarSesion, async (req, res) => {
   try {
@@ -500,7 +481,269 @@ app.get("/api/proveedores", verificarSesion, async (req, res) => {
 });
 
 // ========================================
-// RESPUESTA JSON PARA RUTAS API DESCONOCIDAS
+// MODULO DE VENTAS - DR. JIBA
+// ========================================
+
+// ========================================
+// CONSULTAR CLIENTES ACTIVOS
+// ========================================
+
+app.get("/api/clientes", verificarSesion, async (req, res) => {
+  try {
+    if (req.perfil.rol !== "ADMINISTRADOR") {
+      return res.status(403).json({
+        error: "No tienes permisos para consultar clientes"
+      });
+    }
+
+    const { data, error } = await req.supabaseUsuario
+      .from("customers")
+      .select("id_cliente, nombre, activo")
+      .eq("activo", true)
+      .order("nombre", { ascending: true });
+
+    if (error) {
+      console.error(
+        "Error al consultar clientes:",
+        error.message
+      );
+
+      return res.status(500).json({
+        error: "No se pudieron consultar los clientes"
+      });
+    }
+
+    return res.json(data || []);
+
+  } catch (error) {
+    console.error(
+      "Error interno al consultar clientes:",
+      error.message
+    );
+
+    return res.status(500).json({
+      error: "Error interno del servidor"
+    });
+  }
+});
+
+// ========================================
+// CONSULTAR HISTORIAL DE VENTAS
+// ========================================
+
+app.get("/api/ventas", verificarSesion, async (req, res) => {
+  try {
+    if (req.perfil.rol !== "ADMINISTRADOR") {
+      return res.status(403).json({
+        error: "No tienes permisos para consultar ventas"
+      });
+    }
+
+    const { data, error } = await req.supabaseUsuario
+      .from("sales")
+      .select(
+        "id_venta, id_cliente, fecha_venta, total_venta, estado, observaciones"
+      )
+      .order("id_venta", { ascending: false });
+
+    if (error) {
+      console.error(
+        "Error al consultar ventas:",
+        error.message
+      );
+
+      return res.status(500).json({
+        error: "No se pudieron consultar las ventas"
+      });
+    }
+
+    return res.json(data || []);
+
+  } catch (error) {
+    console.error(
+      "Error interno al consultar ventas:",
+      error.message
+    );
+
+    return res.status(500).json({
+      error: "Error interno del servidor"
+    });
+  }
+});
+
+// ========================================
+// REGISTRAR VENTA COMO BORRADOR
+// ========================================
+
+app.post("/api/ventas", verificarSesion, async (req, res) => {
+  try {
+    if (req.perfil.rol !== "ADMINISTRADOR") {
+      return res.status(403).json({
+        error: "No tienes permisos para registrar ventas"
+      });
+    }
+
+    const {
+      id_cliente,
+      productos,
+      observaciones
+    } = req.body || {};
+
+    if (
+      id_cliente !== null &&
+      id_cliente !== undefined &&
+      (!Number.isSafeInteger(id_cliente) || id_cliente <= 0)
+    ) {
+      return res.status(400).json({
+        error: "Selecciona un cliente válido"
+      });
+    }
+
+    if (
+      !Array.isArray(productos) ||
+      productos.length < 1 ||
+      productos.length > 100
+    ) {
+      return res.status(400).json({
+        error: "Debes agregar entre 1 y 100 productos"
+      });
+    }
+
+    const ids = new Set();
+
+    for (const producto of productos) {
+      if (
+        !producto ||
+        !Number.isSafeInteger(producto.id_producto) ||
+        producto.id_producto <= 0 ||
+        !Number.isSafeInteger(producto.cantidad) ||
+        producto.cantidad <= 0
+      ) {
+        return res.status(400).json({
+          error: "Hay productos con datos incorrectos"
+        });
+      }
+
+      if (ids.has(producto.id_producto)) {
+        return res.status(400).json({
+          error: "No puedes repetir un producto en la misma venta"
+        });
+      }
+
+      ids.add(producto.id_producto);
+    }
+
+    if (
+      observaciones != null &&
+      (
+        typeof observaciones !== "string" ||
+        observaciones.length > 1000
+      )
+    ) {
+      return res.status(400).json({
+        error: "Las observaciones deben ser texto de hasta 1000 caracteres"
+      });
+    }
+
+    const { data, error } = await req.supabaseUsuario.rpc(
+      "registrar_venta",
+      {
+        p_id_cliente: id_cliente ?? null,
+        p_productos: productos.map(producto => ({
+          id_producto: producto.id_producto,
+          cantidad: producto.cantidad
+        })),
+        p_observaciones: observaciones || null
+      }
+    );
+
+    if (error) {
+      console.error(
+        "Error al registrar venta:",
+        error.message
+      );
+
+      return res.status(400).json({
+        error: "No se pudo registrar la venta: " + error.message
+      });
+    }
+
+    return res.status(201).json({
+      mensaje: "Venta guardada como borrador",
+      id_venta: data,
+      estado: "BORRADOR"
+    });
+
+  } catch (error) {
+    console.error(
+      "Error interno al registrar venta:",
+      error.message
+    );
+
+    return res.status(500).json({
+      error: "Error interno al registrar la venta"
+    });
+  }
+});
+
+// ========================================
+// CONFIRMAR VENTA Y DESCONTAR INVENTARIO
+// ========================================
+
+app.post("/api/ventas/:id/confirmar", verificarSesion, async (req, res) => {
+  try {
+    if (req.perfil.rol !== "ADMINISTRADOR") {
+      return res.status(403).json({
+        error: "No tienes permisos para confirmar ventas"
+      });
+    }
+
+    const idVenta = Number(req.params.id);
+
+    if (!Number.isSafeInteger(idVenta) || idVenta <= 0) {
+      return res.status(400).json({
+        error: "El número de venta no es válido"
+      });
+    }
+
+    const { error } = await req.supabaseUsuario.rpc(
+      "confirmar_venta_autorizada",
+      {
+        p_id_venta: idVenta
+      }
+    );
+
+    if (error) {
+      console.error(
+        "Error al confirmar venta:",
+        error.message
+      );
+
+      return res.status(400).json({
+        error: "No se pudo confirmar la venta: " + error.message
+      });
+    }
+
+    return res.json({
+      mensaje: "Venta confirmada correctamente",
+      id_venta: idVenta,
+      estado: "CONFIRMADA"
+    });
+
+  } catch (error) {
+    console.error(
+      "Error interno al confirmar venta:",
+      error.message
+    );
+
+    return res.status(500).json({
+      error: "Error interno al confirmar la venta"
+    });
+  }
+});
+
+// ========================================
+// RESPUESTA PARA RUTAS API DESCONOCIDAS
 // ========================================
 
 app.use("/api", (req, res) => {

@@ -809,6 +809,11 @@ body:has(#seccionLogin:not([hidden])) footer {margin-left:0;background:transpare
         await mostrarCompras(vistaActual);
         return;
       }
+      
+      if (modulo === "Ventas") {
+  await mostrarVentas(vistaActual);
+  return;
+}
 
       if (modulo === "Inventario") {
         descripcion.textContent =
